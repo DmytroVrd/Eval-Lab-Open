@@ -1,0 +1,14 @@
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+.idea/
+*.py[cod]
+
+*.db
+*.sqlite
+*.sqlite3
+data/
+
+uvicorn.out.log
+uvicorn.err.log

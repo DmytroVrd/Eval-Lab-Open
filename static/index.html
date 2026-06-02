@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Eval Lab</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-block">
+          <span class="brand-mark" aria-hidden="true">EL</span>
+          <div>
+            <h1>Eval Lab</h1>
+            <p id="config-summary">Loading config</p>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <span id="api-status" class="status-pill neutral">Connecting</span>
+          <button id="refresh-all" class="button secondary" type="button">Refresh</button>
+        </div>
+      </header>
+
+      <main class="layout">
+        <aside class="sidebar" aria-label="Test sets">
+          <section class="panel sidebar-panel">
+            <div class="panel-heading">
+              <div>
+                <h2>Test Sets</h2>
+                <p id="test-set-count">0 sets</p>
+              </div>
+              <button id="refresh-test-sets" class="icon-button" type="button" aria-label="Refresh test sets" title="Refresh test sets">R</button>
+            </div>
+
+            <form id="create-test-set-form" class="stacked-form">
+              <label>
+                <span>Name</span>
+                <input id="new-test-set-name" name="name" type="text" autocomplete="off" required maxlength="120" />
+              </label>
+              <label>
+                <span>Description</span>
+                <textarea id="new-test-set-description" name="description" rows="3" maxlength="500"></textarea>
+              </label>
+              <button class="button primary full" type="submit">Create Set</button>
+            </form>
+
+            <div id="test-set-list" class="test-set-list" role="list" aria-live="polite"></div>
+          </section>
+        </aside>
+
+        <section class="workspace" aria-label="Evaluation workspace">
+          <div class="workspace-header">
+            <div>
+              <p class="eyebrow">Selected Set</p>
+              <h2 id="selected-title">No set selected</h2>
+              <p id="selected-description">Create or select a test set to begin.</p>
+            </div>
+            <div class="metric-strip" aria-label="Selected set metrics">
+              <div>
+                <span id="case-count">0</span>
+                <small>Cases</small>
+              </div>
+              <div>
+                <span id="run-count">0</span>
+                <small>Runs</small>
+              </div>
+              <div>
+                <span id="latest-status">Idle</span>
+                <small>Latest</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="work-grid">
+            <section class="panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Cases</h2>
+                  <p id="case-panel-note">Bulk add</p>
+                </div>
+                <button id="reload-cases" class="button secondary compact" type="button">Reload</button>
+              </div>
+
+              <form id="bulk-cases-form" class="stacked-form">
+                <label>
+                  <span>Bulk input</span>
+                  <textarea id="bulk-cases-input" rows="8" spellcheck="false" placeholder='[{"input":"question","expected":"answer"}]'></textarea>
+                </label>
+                <div class="form-row">
+                  <button class="button primary" type="submit">Add Cases</button>
+                  <button id="clear-bulk-cases" class="button secondary" type="button">Clear</button>
+                </div>
+              </form>
+
+              <div class="mini-table-wrap">
+                <table class="compact-table">
+                  <thead>
+                    <tr>
+                      <th>Input</th>
+                      <th>Expected</th>
+                    </tr>
+                  </thead>
+                  <tbody id="case-preview-body">
+                    <tr>
+                      <td colspan="2" class="empty-cell">No cases loaded</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Run Config</h2>
+                  <p id="run-form-note">Ready</p>
+                </div>
+              </div>
+
+              <form id="run-form" class="run-form">
+                <label>
+                  <span>Model</span>
+                  <input id="run-model" name="model" list="model-options" autocomplete="off" required />
+                  <datalist id="model-options"></datalist>
+                </label>
+                <label>
+                  <span>Judge</span>
+                  <input id="run-judge" name="judge_model" list="judge-options" autocomplete="off" />
+                  <datalist id="judge-options"></datalist>
+                </label>
+                <label>
+                  <span>Temperature</span>
+                  <input id="run-temperature" name="temperature" type="number" min="0" max="2" step="0.1" value="0" />
+                </label>
+                <label>
+                  <span>Max cases</span>
+                  <input id="run-max-cases" name="max_cases" type="number" min="1" step="1" placeholder="All" />
+                </label>
+                <label class="wide-field">
+                  <span>Prompt Template</span>
+                  <textarea id="run-notes" name="prompt_template" rows="4" required>Answer clearly and concisely:
+
+{input}</textarea>
+                  <small class="field-hint">має містити {input}</small>
+                </label>
+                <button class="button primary wide-field" type="submit">Start Run</button>
+              </form>
+            </section>
+          </div>
+
+          <section class="panel status-panel">
+            <div class="panel-heading">
+              <div>
+                <h2>Current Run</h2>
+                <p id="current-run-id">No active run</p>
+              </div>
+              <button id="stop-polling" class="button secondary compact" type="button">Stop Poll</button>
+            </div>
+            <div class="run-status-grid">
+              <div>
+                <small>Status</small>
+                <strong id="current-run-status">Idle</strong>
+              </div>
+              <div>
+                <small>Progress</small>
+                <strong id="current-run-progress">0 / 0</strong>
+              </div>
+              <div>
+                <small>Score</small>
+                <strong id="current-run-score">-</strong>
+              </div>
+              <div>
+                <small>Updated</small>
+                <strong id="current-run-updated">-</strong>
+              </div>
+            </div>
+            <div class="progress-bar" aria-hidden="true">
+              <span id="current-run-progress-bar"></span>
+            </div>
+          </section>
+
+          <section class="panel table-panel">
+            <div class="tabbar" role="tablist" aria-label="Result views">
+              <button id="results-tab" class="tab active" type="button" role="tab" aria-selected="true" data-view="results">Results</button>
+              <button id="history-tab" class="tab" type="button" role="tab" aria-selected="false" data-view="history">History</button>
+            </div>
+
+            <div id="results-view" class="table-view active">
+              <div class="table-tools">
+                <h2>Results</h2>
+                <button id="reload-results" class="button secondary compact" type="button">Reload</button>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Case</th>
+                      <th>Input</th>
+                      <th>Output</th>
+                      <th>Score</th>
+                      <th>Pass</th>
+                      <th>Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody id="results-body">
+                    <tr>
+                      <td colspan="6" class="empty-cell">No results loaded</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div id="history-view" class="table-view">
+              <div class="table-tools">
+                <h2>Run History</h2>
+                <button id="reload-history" class="button secondary compact" type="button">Reload</button>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Run</th>
+                      <th>Status</th>
+                      <th>Model</th>
+                      <th>Score</th>
+                      <th>Started</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="history-body">
+                    <tr>
+                      <td colspan="6" class="empty-cell">No runs loaded</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>

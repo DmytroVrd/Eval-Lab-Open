@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: Python checks
+    runs-on: ubuntu-latest
+    env:
+      LOCAL_MOCK_WITHOUT_KEYS: "true"
+      DEFAULT_TARGET_MODEL: mock/target
+      DEFAULT_JUDGE_PROVIDER: mock
+      DEFAULT_JUDGE_MODEL: mock/judge
+      DATABASE_URL: sqlite+aiosqlite:///./data/test_eval_lab.db
+      OPENROUTER_API_KEY: ""
+      ANTHROPIC_API_KEY: ""
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest pytest-asyncio
+
+          if [ -f pyproject.toml ]; then
+            python -m pip install -e ".[dev]" || python -m pip install -e .
+          elif [ -f requirements-dev.txt ]; then
+            python -m pip install -r requirements-dev.txt
+          elif [ -f requirements.txt ]; then
+            python -m pip install -r requirements.txt
+          else
+            python -m pip install fastapi "uvicorn[standard]" sqlalchemy aiosqlite alembic pydantic-settings httpx
+          fi
+
+      - name: Compile Python files
+        run: python -m compileall .
+
+      - name: Run tests
+        run: |
+          if [ -d tests ] && find tests -name '*.py' -print -quit | grep -q .; then
+            pytest -q
+          else
+            echo "No tests found yet; skipping pytest."
+          fi
