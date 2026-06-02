@@ -16,6 +16,9 @@ dependencies = [
     "uvicorn[standard]>=0.30.6",
 ]
 
+[tool.setuptools]
+packages = ["app"]
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.3.2",
@@ -25,4 +28,3 @@ dev = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-
