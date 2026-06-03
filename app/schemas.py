@@ -162,4 +162,6 @@ class AppConfigRead(BaseModel):
     max_concurrency: int
     openrouter_configured: bool
     anthropic_configured: bool
+    gemini_configured: bool
+    groq_configured: bool
     local_mock_without_keys: bool

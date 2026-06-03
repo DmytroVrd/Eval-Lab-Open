@@ -1,6 +1,6 @@
 # AI Eval Lab
 
-AI Eval Lab is a small web app for regression-testing prompts and LLM models. Create a test set, run a target model through OpenRouter or local mock mode, judge each answer, and review scores in a dashboard.
+AI Eval Lab is a small web app for regression-testing prompts and LLM models. Create a test set, run a target model through OpenRouter, Gemini, Groq, or local mock mode, judge each answer, and review scores in a dashboard.
 
 ## Українською
 
@@ -8,7 +8,7 @@ AI Eval Lab is a small web app for regression-testing prompts and LLM models. Cr
 
 - тест-сети й кейси через FastAPI API та веб-дашборд;
 - асинхронний прогін тестів у фоні;
-- target-модель через OpenRouter або `mock/target`;
+- target-модель через OpenRouter, Gemini, Groq або `mock/target`;
 - judge через OpenRouter, Anthropic tool-use JSON schema або `mock/judge`;
 - оцінка `score`, `pass/fail`, причина, latency та помилки по кожному кейсу;
 - історія прогонів для кожного тест-сету;
@@ -46,6 +46,19 @@ DEFAULT_JUDGE_PROVIDER=openrouter
 DEFAULT_JUDGE_MODEL=openrouter/free
 LOCAL_MOCK_WITHOUT_KEYS=false
 ```
+
+Gemini і Groq теж можна використовувати як target-модель через префікси моделей; заміни `<model>` на ID моделі провайдера:
+
+```env
+GEMINI_API_KEY=...
+GROQ_API_KEY=gsk_...
+DEFAULT_TARGET_MODEL=gemini/<model>
+DEFAULT_JUDGE_PROVIDER=openrouter
+DEFAULT_JUDGE_MODEL=openrouter/free
+LOCAL_MOCK_WITHOUT_KEYS=false
+```
+
+Для реальних provider API free-режим не гарантує нульових витрат: free tiers можуть мати rate limits, змінювати доступні моделі або вимагати billing. `LOCAL_MOCK_WITHOUT_KEYS=true` захищає від зовнішніх викликів тільки коли відповідні ключі порожні.
 
 Anthropic judge теж підтриманий, але це зазвичай не повністю free:
 
@@ -93,7 +106,7 @@ AI Eval Lab is a compact FastAPI + vanilla JS evaluation dashboard:
 - run a target LLM against all cases;
 - judge each output with structured LLM-as-judge results;
 - store run history and inspect result tables;
-- run locally for free with mocks, or use OpenRouter/Anthropic keys.
+- run locally for free with mocks, or use OpenRouter/Gemini/Groq/Anthropic keys.
 
 ### Local Setup
 
@@ -108,6 +121,23 @@ uvicorn app.main:app --reload
 ```
 
 Open `http://localhost:8000` for the dashboard or `http://localhost:8000/docs` for OpenAPI docs.
+
+### Provider Models
+
+Set provider API keys in `.env` and use a provider prefix in model names:
+
+```env
+OPENROUTER_API_KEY=sk-or-...
+GEMINI_API_KEY=...
+GROQ_API_KEY=gsk_...
+DEFAULT_TARGET_MODEL=gemini/<model>
+DEFAULT_JUDGE_PROVIDER=openrouter
+DEFAULT_JUDGE_MODEL=openrouter/free
+```
+
+Replace `<model>` with a model ID from the provider. Use `gemini/<model>` for Gemini target models and `groq/<model>` for Groq target models. Judges currently support OpenRouter, Anthropic, or mock mode.
+
+Free provider tiers can still have rate limits, model availability changes, or billing requirements. `LOCAL_MOCK_WITHOUT_KEYS=true` only prevents external provider calls when the matching API keys are empty.
 
 ### API Surface
 

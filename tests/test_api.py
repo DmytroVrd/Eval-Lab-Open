@@ -11,7 +11,9 @@ def test_health_and_config(client: TestClient) -> None:
     payload = config.json()
     assert payload["pass_threshold"] == 0.7
     assert payload["max_concurrency"] == 2
-    assert payload["models"] in (["openrouter/free", "mock/target"], ["mock/target"])
+    assert "mock/target" in payload["models"]
+    assert any(model.startswith("gemini/") for model in payload["models"])
+    assert any(model.startswith("groq/") for model in payload["models"])
     assert payload["judge_models"] in (["openrouter/free", "mock/judge"], ["mock/judge"])
     assert "meta-llama/llama-3.3-8b-instruct:free" not in payload["models"]
     assert "google/gemma-3-12b-it:free" not in payload["models"]

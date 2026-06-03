@@ -19,11 +19,17 @@ class Settings(BaseSettings):
 
     openrouter_api_key: str | None = None
     anthropic_api_key: str | None = None
+    gemini_api_key: str | None = None
+    groq_api_key: str | None = None
 
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     anthropic_base_url: str = "https://api.anthropic.com/v1"
+    gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
+    groq_base_url: str = "https://api.groq.com/openai/v1"
 
     default_target_model: str = "openrouter/free"
+    default_gemini_model: str = "gemini-2.5-flash"
+    default_groq_model: str = "llama-3.3-70b-versatile"
     default_judge_provider: Literal["openrouter", "anthropic", "mock"] = "openrouter"
     default_judge_model: str = "openrouter/free"
 
