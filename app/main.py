@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
 from app.db import init_db
+from app.demo_seed import seed_demo_data
 from app.routes.config import router as config_router
 from app.routes.runs import router as runs_router
 from app.routes.test_sets import router as test_sets_router
@@ -21,6 +22,8 @@ STATIC_DIR = BASE_DIR / "static"
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await init_db()
+    if get_settings().seed_demo_data:
+        await seed_demo_data()
     yield
 
 

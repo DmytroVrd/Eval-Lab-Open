@@ -7,6 +7,7 @@ const API = {
   runs: "/runs",
   run: (id) => `/runs/${encodeURIComponent(id)}`,
   runResults: (id) => `/runs/${encodeURIComponent(id)}/results`,
+  compareRuns: (a, b) => `/runs/compare?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`,
   testSetRuns: (id) => `/test-sets/${encodeURIComponent(id)}/runs`,
 };
 
@@ -21,6 +22,8 @@ const state = {
   currentRun: null,
   results: [],
   resultsRunId: null,
+  compareRunIds: [],
+  compareData: null,
   pollTimer: null,
 };
 
@@ -36,6 +39,8 @@ const els = {
   newTestSetDescription: document.querySelector("#new-test-set-description"),
   selectedTitle: document.querySelector("#selected-title"),
   selectedDescription: document.querySelector("#selected-description"),
+  clearSelectedCases: document.querySelector("#clear-selected-cases"),
+  deleteSelectedSet: document.querySelector("#delete-selected-set"),
   caseCount: document.querySelector("#case-count"),
   runCount: document.querySelector("#run-count"),
   latestStatus: document.querySelector("#latest-status"),
@@ -62,13 +67,25 @@ const els = {
   stopPolling: document.querySelector("#stop-polling"),
   resultsTab: document.querySelector("#results-tab"),
   historyTab: document.querySelector("#history-tab"),
+  compareTab: document.querySelector("#compare-tab"),
   resultsView: document.querySelector("#results-view"),
   historyView: document.querySelector("#history-view"),
+  compareView: document.querySelector("#compare-view"),
   reloadResults: document.querySelector("#reload-results"),
   reloadHistory: document.querySelector("#reload-history"),
+  runCompare: document.querySelector("#run-compare"),
   resultsRunMeta: document.querySelector("#results-run-meta"),
+  resultsPromptDetail: document.querySelector("#results-prompt-detail"),
+  resultsPromptSummary: document.querySelector("#results-prompt-summary"),
+  resultsPromptFull: document.querySelector("#results-prompt-full"),
+  compareSelectionMeta: document.querySelector("#compare-selection-meta"),
+  scoreChart: document.querySelector("#score-chart"),
+  scoreChartMeta: document.querySelector("#score-chart-meta"),
+  compareRunMeta: document.querySelector("#compare-run-meta"),
+  compareSummary: document.querySelector("#compare-summary"),
   resultsBody: document.querySelector("#results-body"),
   historyBody: document.querySelector("#history-body"),
+  compareBody: document.querySelector("#compare-body"),
   toastRegion: document.querySelector("#toast-region"),
 };
 
@@ -84,6 +101,8 @@ function bindEvents() {
   els.refreshAll.addEventListener("click", loadInitialData);
   els.refreshTestSets.addEventListener("click", loadTestSets);
   els.createTestSetForm.addEventListener("submit", handleCreateTestSet);
+  els.clearSelectedCases.addEventListener("click", handleClearSelectedCases);
+  els.deleteSelectedSet.addEventListener("click", handleDeleteSelectedSet);
   els.bulkCasesForm.addEventListener("submit", handleBulkCases);
   els.loadSampleCases.addEventListener("click", loadSampleCases);
   els.clearBulkCases.addEventListener("click", () => {
@@ -95,8 +114,9 @@ function bindEvents() {
   els.stopPolling.addEventListener("click", stopPolling);
   els.reloadResults.addEventListener("click", () => loadResultsForCurrentRun(true));
   els.reloadHistory.addEventListener("click", () => loadRunsForSelected(true));
+  els.runCompare.addEventListener("click", loadCompare);
 
-  [els.resultsTab, els.historyTab].forEach((tab) => {
+  [els.resultsTab, els.historyTab, els.compareTab].forEach((tab) => {
     tab.addEventListener("click", () => setActiveView(tab.dataset.view));
   });
 }
@@ -253,6 +273,68 @@ async function handleCreateTestSet(event) {
   }
 }
 
+async function handleDeleteSelectedSet() {
+  if (!state.selectedTestSetId || !state.selectedTestSet) {
+    return;
+  }
+
+  const name = state.selectedTestSet.name || `Set ${shortId(state.selectedTestSetId)}`;
+  const confirmed = window.confirm(
+    `Delete "${name}"? This removes its cases, runs, and results.`
+  );
+  if (!confirmed) {
+    return;
+  }
+
+  els.deleteSelectedSet.disabled = true;
+  try {
+    await request(API.testSet(state.selectedTestSetId), { method: "DELETE" });
+    showToast("Set deleted", `${name} was removed.`, "ok");
+    clearSelection();
+    await loadTestSets();
+  } catch (error) {
+    showToast("Delete failed", getErrorMessage(error), "error");
+  } finally {
+    els.deleteSelectedSet.disabled = !state.selectedTestSetId;
+  }
+}
+
+async function handleClearSelectedCases() {
+  if (!state.selectedTestSetId || !state.selectedTestSet) {
+    return;
+  }
+
+  const name = state.selectedTestSet.name || `Set ${shortId(state.selectedTestSetId)}`;
+  const confirmed = window.confirm(
+    `Clear cases from "${name}"? This also removes run history for this set.`
+  );
+  if (!confirmed) {
+    return;
+  }
+
+  els.clearSelectedCases.disabled = true;
+  try {
+    await request(API.cases(state.selectedTestSetId), { method: "DELETE" });
+    state.cases = [];
+    state.runs = [];
+    state.currentRunId = null;
+    state.currentRun = null;
+    state.results = [];
+    state.resultsRunId = null;
+    state.compareRunIds = [];
+    state.compareData = null;
+    showToast("Cases cleared", `${name} is empty now.`, "ok");
+    await loadTestSets();
+    if (state.selectedTestSetId) {
+      await loadSelectedDetails();
+    }
+  } catch (error) {
+    showToast("Clear failed", getErrorMessage(error), "error");
+  } finally {
+    els.clearSelectedCases.disabled = !state.selectedTestSetId;
+  }
+}
+
 async function handleBulkCases(event) {
   event.preventDefault();
   if (!ensureSelected()) {
@@ -401,6 +483,22 @@ async function loadResultsForCurrentRun(showNotice) {
     }
   } catch (error) {
     showToast("Results failed", getErrorMessage(error), "error");
+  }
+}
+
+async function loadCompare() {
+  if (state.compareRunIds.length !== 2) {
+    showToast("Pick two runs", "Use History to select run A and run B.", "error");
+    setActiveView("history");
+    return;
+  }
+  try {
+    const [a, b] = state.compareRunIds;
+    state.compareData = await request(API.compareRuns(a, b));
+    renderCompare();
+    setActiveView("compare");
+  } catch (error) {
+    showToast("Compare failed", getErrorMessage(error), "error");
   }
 }
 
@@ -578,7 +676,7 @@ function renderResults() {
   renderResultsMeta();
 
   if (state.results.length === 0) {
-    appendEmptyRow(els.resultsBody, 6, "No results loaded");
+    appendEmptyRow(els.resultsBody, 7, "No results loaded");
     return;
   }
 
@@ -588,6 +686,7 @@ function renderResults() {
     appendCell(row, compactValue(result.input));
     appendCell(row, compactValue(result.output));
     appendCell(row, formatScore(result.score));
+    appendCell(row, renderSubScores(result), { node: true });
 
     const passCell = document.createElement("td");
     const passed = normalizeBoolean(result.passed);
@@ -602,9 +701,11 @@ function renderResults() {
 
 function renderHistory() {
   els.historyBody.innerHTML = "";
+  renderScoreChart();
+  renderCompareSelectionMeta();
 
   if (state.runs.length === 0) {
-    appendEmptyRow(els.historyBody, 7, "No runs loaded");
+    appendEmptyRow(els.historyBody, 8, "No runs loaded");
     return;
   }
 
@@ -617,6 +718,18 @@ function renderHistory() {
     appendCell(row, judgeForRun(run));
     appendCell(row, formatScore(run.score ?? run.averageScore ?? run.avg_score));
     appendCell(row, formatDate(run.startedAt || run.createdAt));
+
+    const compareCell = document.createElement("td");
+    const compareButton = document.createElement("button");
+    compareButton.type = "button";
+    compareButton.className = "button secondary compact";
+    compareButton.textContent = compareLabel(run.id);
+    compareButton.addEventListener("click", () => {
+      toggleCompareRun(run.id);
+      renderHistory();
+    });
+    compareCell.appendChild(compareButton);
+    row.appendChild(compareCell);
 
     const actionCell = document.createElement("td");
     const openButton = document.createElement("button");
@@ -641,6 +754,45 @@ function renderHistory() {
   });
 }
 
+function renderCompare() {
+  els.compareBody.innerHTML = "";
+  els.compareSummary.innerHTML = "";
+
+  const data = state.compareData;
+  if (!data) {
+    els.compareRunMeta.textContent = "Pick two runs in History";
+    appendEmptyRow(els.compareBody, 6, "Select two runs in History");
+    return;
+  }
+
+  els.compareRunMeta.textContent = `Run ${data.run_a.id} -> Run ${data.run_b.id} / avg delta ${formatDelta(data.avg_delta_score)}`;
+  els.compareSummary.append(
+    metricCard("Run A", `#${data.run_a.id}`, formatScore(data.run_a.avg_score)),
+    metricCard("Run B", `#${data.run_b.id}`, formatScore(data.run_b.avg_score)),
+    metricCard("Delta", "score", formatDelta(data.avg_delta_score))
+  );
+
+  if (!data.rows?.length) {
+    appendEmptyRow(els.compareBody, 6, "No comparable rows");
+    return;
+  }
+
+  data.rows.forEach((item) => {
+    const row = document.createElement("tr");
+    const delta = toOptionalNumber(item.delta_score);
+    if (delta !== null) {
+      row.className = delta < -0.05 ? "compare-down" : delta > 0.05 ? "compare-up" : "";
+    }
+    appendCell(row, item.test_case_id);
+    appendCell(row, compactValue(item.input));
+    appendCell(row, compareRunCell(item.output_a, item.score_a, item.reason_a), { node: true });
+    appendCell(row, compareRunCell(item.output_b, item.score_b, item.reason_b), { node: true });
+    appendCell(row, formatDelta(item.delta_score));
+    appendCell(row, renderDeltaScores(item), { node: true });
+    els.compareBody.appendChild(row);
+  });
+}
+
 function clearSelection() {
   state.selectedTestSetId = null;
   state.selectedTestSet = null;
@@ -650,6 +802,8 @@ function clearSelection() {
   state.currentRun = null;
   state.results = [];
   state.resultsRunId = null;
+  state.compareRunIds = [];
+  state.compareData = null;
   stopPolling(false);
   setSelectedEnabled(false);
   els.selectedTitle.textContent = "No set selected";
@@ -677,6 +831,8 @@ function setSelectedEnabled(enabled) {
     els.runMaxCases,
     els.runNotes,
     els.runForm.querySelector("button[type='submit']"),
+    els.clearSelectedCases,
+    els.deleteSelectedSet,
     els.reloadHistory,
   ].forEach((element) => {
     element.disabled = !enabled;
@@ -685,12 +841,17 @@ function setSelectedEnabled(enabled) {
 
 function setActiveView(view) {
   const showResults = view === "results";
+  const showHistory = view === "history";
+  const showCompare = view === "compare";
   els.resultsTab.classList.toggle("active", showResults);
   els.resultsTab.setAttribute("aria-selected", String(showResults));
-  els.historyTab.classList.toggle("active", !showResults);
-  els.historyTab.setAttribute("aria-selected", String(!showResults));
+  els.historyTab.classList.toggle("active", showHistory);
+  els.historyTab.setAttribute("aria-selected", String(showHistory));
+  els.compareTab.classList.toggle("active", showCompare);
+  els.compareTab.setAttribute("aria-selected", String(showCompare));
   els.resultsView.classList.toggle("active", showResults);
-  els.historyView.classList.toggle("active", !showResults);
+  els.historyView.classList.toggle("active", showHistory);
+  els.compareView.classList.toggle("active", showCompare);
 }
 
 async function request(path, options = {}) {
@@ -830,6 +991,10 @@ function normalizeResult(value) {
     input: firstString(item.input, item.prompt, item.question, testCase.input, testCase.prompt),
     output: firstString(item.output, item.actual, item.actual_output, item.response, item.model_output),
     score: toOptionalNumber(item.score ?? item.grade ?? item.value),
+    correctness: toOptionalNumber(item.correctness_score ?? item.correctness),
+    relevance: toOptionalNumber(item.relevance_score ?? item.relevance),
+    completeness: toOptionalNumber(item.completeness_score ?? item.completeness),
+    promptQuality: toOptionalNumber(item.prompt_quality_score ?? item.prompt_quality),
     passed: item.passed ?? item.pass ?? item.success,
     notes: firstString(item.notes, item.feedback, item.judge_reason, item.reason, item.explanation),
     reason: item.reason || item.judge_reason,
@@ -848,6 +1013,9 @@ function sortRuns(runs) {
 function renderResultsMeta() {
   if (!state.currentRunId || !state.currentRun) {
     els.resultsRunMeta.textContent = "No run selected";
+    els.resultsPromptDetail.hidden = true;
+    els.resultsPromptSummary.textContent = "Prompt: -";
+    els.resultsPromptFull.textContent = "";
     return;
   }
 
@@ -858,6 +1026,10 @@ function renderResultsMeta() {
     `Judge: ${judgeForRun(state.currentRun)}`,
     loading,
   ].join(" / ");
+  const prompt = promptForRun(state.currentRun);
+  els.resultsPromptDetail.hidden = false;
+  els.resultsPromptSummary.textContent = `Prompt: ${promptPreviewForRun(state.currentRun)}`;
+  els.resultsPromptFull.textContent = prompt;
 }
 
 function modelForRun(run) {
@@ -871,6 +1043,159 @@ function judgeForRun(run) {
     return `${provider}:${model}`;
   }
   return model || provider || "-";
+}
+
+function promptPreviewForRun(run) {
+  const prompt = promptForRun(run);
+  if (!prompt) {
+    return "-";
+  }
+  return truncateText(prompt.replace(/\{input\}/g, "[input]"), 180);
+}
+
+function promptForRun(run) {
+  return firstString(run?.prompt_template, run?.promptTemplate, run?.config?.prompt_template);
+}
+
+function toggleCompareRun(runId) {
+  const value = String(runId);
+  const existing = state.compareRunIds.findIndex((id) => String(id) === value);
+  if (existing >= 0) {
+    state.compareRunIds.splice(existing, 1);
+  } else {
+    if (state.compareRunIds.length >= 2) {
+      state.compareRunIds.shift();
+    }
+    state.compareRunIds.push(runId);
+  }
+  state.compareData = null;
+  renderCompareSelectionMeta();
+  renderCompare();
+}
+
+function compareLabel(runId) {
+  const index = state.compareRunIds.findIndex((id) => String(id) === String(runId));
+  if (index === 0) {
+    return "A";
+  }
+  if (index === 1) {
+    return "B";
+  }
+  return "Pick";
+}
+
+function renderCompareSelectionMeta() {
+  const ids = state.compareRunIds.map((id, index) => `${index === 0 ? "A" : "B"}: #${id}`);
+  els.compareSelectionMeta.textContent = ids.length ? ids.join(" / ") : "Select two runs to compare";
+}
+
+function renderScoreChart() {
+  const doneRuns = [...state.runs]
+    .filter((run) => toOptionalNumber(run.score ?? run.avg_score) !== null)
+    .reverse();
+  els.scoreChart.innerHTML = "";
+
+  if (!doneRuns.length) {
+    els.scoreChartMeta.textContent = "No score data yet";
+    els.scoreChart.appendChild(emptyBlock("No score data"));
+    return;
+  }
+
+  els.scoreChartMeta.textContent = `${doneRuns.length} runs`;
+  const width = 720;
+  const height = 150;
+  const pad = 18;
+  const points = doneRuns.map((run, index) => {
+    const score = toOptionalNumber(run.score ?? run.avg_score) ?? 0;
+    const x = doneRuns.length === 1 ? width / 2 : pad + (index * (width - pad * 2)) / (doneRuns.length - 1);
+    const y = height - pad - score * (height - pad * 2);
+    return { run, score, x, y };
+  });
+
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "Average score by run");
+
+  const path = document.createElementNS(svg.namespaceURI, "path");
+  path.setAttribute("d", points.map((point, index) => `${index ? "L" : "M"} ${point.x} ${point.y}`).join(" "));
+  path.setAttribute("class", "score-line");
+  svg.appendChild(path);
+
+  points.forEach((point) => {
+    const circle = document.createElementNS(svg.namespaceURI, "circle");
+    circle.setAttribute("cx", String(point.x));
+    circle.setAttribute("cy", String(point.y));
+    circle.setAttribute("r", "4");
+    circle.setAttribute("class", "score-point");
+    const title = document.createElementNS(svg.namespaceURI, "title");
+    title.textContent = `Run ${point.run.id}: ${formatScore(point.score)}`;
+    circle.appendChild(title);
+    svg.appendChild(circle);
+  });
+
+  els.scoreChart.appendChild(svg);
+}
+
+function renderSubScores(result) {
+  const wrap = document.createElement("div");
+  wrap.className = "subscore-list";
+  [
+    ["C", result.correctness],
+    ["R", result.relevance],
+    ["Comp", result.completeness],
+    ["Prompt", result.promptQuality],
+  ].forEach(([label, value]) => {
+    const chip = document.createElement("span");
+    chip.className = "subscore-chip";
+    chip.textContent = `${label} ${formatScore(value)}`;
+    wrap.appendChild(chip);
+  });
+  return wrap;
+}
+
+function renderDeltaScores(item) {
+  const wrap = document.createElement("div");
+  wrap.className = "subscore-list";
+  [
+    ["Correct", item.delta_correctness],
+    ["Rel", item.delta_relevance],
+    ["Comp", item.delta_completeness],
+    ["Prompt", item.delta_prompt_quality],
+  ].forEach(([label, value]) => {
+    const chip = document.createElement("span");
+    const delta = toOptionalNumber(value);
+    chip.className = `subscore-chip ${delta < -0.05 ? "negative" : delta > 0.05 ? "positive" : ""}`;
+    chip.textContent = `${label} ${formatDelta(value)}`;
+    wrap.appendChild(chip);
+  });
+  return wrap;
+}
+
+function compareRunCell(output, score, reason) {
+  const wrap = document.createElement("div");
+  wrap.className = "compare-cell";
+  const scoreLine = document.createElement("strong");
+  scoreLine.textContent = `Score ${formatScore(score)}`;
+  const outputLine = document.createElement("p");
+  outputLine.textContent = compactValue(output);
+  const reasonLine = document.createElement("small");
+  reasonLine.textContent = compactValue(reason);
+  wrap.append(scoreLine, outputLine, reasonLine);
+  return wrap;
+}
+
+function metricCard(label, value, metric) {
+  const card = document.createElement("div");
+  card.className = "compare-metric";
+  const title = document.createElement("small");
+  title.textContent = label;
+  const main = document.createElement("strong");
+  main.textContent = value;
+  const sub = document.createElement("span");
+  sub.textContent = metric;
+  card.append(title, main, sub);
+  return card;
 }
 
 function providerForModel(model, fallback) {
@@ -1003,12 +1328,29 @@ function compactValue(value) {
   return String(value);
 }
 
+function truncateText(value, maxLength) {
+  const text = compactValue(value).replace(/\s+/g, " ").trim();
+  if (text.length <= maxLength) {
+    return text;
+  }
+  return `${text.slice(0, Math.max(0, maxLength - 1)).trim()}...`;
+}
+
 function formatScore(value) {
   const number = toOptionalNumber(value);
   if (number === null) {
     return "-";
   }
   return Number.isInteger(number) ? String(number) : number.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+function formatDelta(value) {
+  const number = toOptionalNumber(value);
+  if (number === null) {
+    return "-";
+  }
+  const formatted = formatScore(Math.abs(number));
+  return `${number > 0 ? "+" : number < 0 ? "-" : ""}${formatted}`;
 }
 
 function formatDate(value) {
@@ -1039,9 +1381,13 @@ function plural(count, one, many) {
   return count === 1 ? one : many;
 }
 
-function appendCell(row, value) {
+function appendCell(row, value, options = {}) {
   const cell = document.createElement("td");
-  cell.textContent = value;
+  if (options.node) {
+    cell.appendChild(value);
+  } else {
+    cell.textContent = value;
+  }
   row.appendChild(cell);
 }
 

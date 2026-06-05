@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-from email.utils import parsedate_to_datetime
 from datetime import datetime, timezone
+from collections.abc import Awaitable, Callable
+from email.utils import parsedate_to_datetime
 from typing import Any
 
 import httpx
@@ -33,13 +34,15 @@ async def post_with_retries(
     headers: dict[str, str],
     json_payload: dict[str, Any],
     max_attempts: int = 3,
+    before_attempt: Callable[[], Awaitable[None]] | None = None,
 ) -> httpx.Response:
     response: httpx.Response | None = None
     for attempt_index in range(max_attempts):
+        if before_attempt is not None:
+            await before_attempt()
         response = await client.post(url, headers=headers, json=json_payload)
         if response.status_code not in RETRY_STATUSES or attempt_index >= max_attempts - 1:
             return response
         await asyncio.sleep(retry_delay_seconds(response, attempt_index))
     assert response is not None
     return response
-

@@ -67,14 +67,13 @@ async def call_target_model(
     http = client or httpx.AsyncClient(timeout=settings.request_timeout_seconds)
     try:
         if provider == "gemini":
-            if close_client:
-                await wait_for_provider_slot("gemini", settings.gemini_min_interval_seconds)
             output = await _call_gemini(
                 http=http,
                 prompt=prompt,
                 model=provider_model,
                 temperature=temperature,
                 settings=settings,
+                throttle=close_client,
             )
         elif provider == "groq":
             if close_client:
@@ -181,6 +180,7 @@ async def _call_gemini(
     model: str,
     temperature: float | None,
     settings: Settings,
+    throttle: bool,
 ) -> str:
     if not settings.gemini_api_key:
         raise LLMCallError("GEMINI_API_KEY is required for non-mock target calls.")
@@ -198,6 +198,11 @@ async def _call_gemini(
                 "temperature": 0.2 if temperature is None else temperature,
             },
         },
+        before_attempt=(
+            lambda: wait_for_provider_slot("gemini", settings.gemini_min_interval_seconds)
+        )
+        if throttle
+        else None,
     )
     response.raise_for_status()
     payload = response.json()

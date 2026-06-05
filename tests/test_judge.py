@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from app.config import Settings
-from app.judge import evaluate_answer
+from app.judge import JudgeResult, _apply_prompt_quality_cap, evaluate_answer
 
 
 @pytest.mark.asyncio
@@ -38,6 +38,93 @@ async def test_mock_judge_scores_empty_output_as_zero() -> None:
 
     assert result.score == 0
     assert result.passed is False
+
+
+@pytest.mark.asyncio
+async def test_mock_judge_penalizes_input_only_paraphrase_when_reference_requires_more() -> None:
+    result = await evaluate_answer(
+        input_text="The service is slow after deploy. No data loss.",
+        output="The service is slow after deploy, and there is no data loss.",
+        reference=(
+            "State severity, identify deploy latency as likely cause, list rollback and monitoring "
+            "actions, and include a customer-safe update."
+        ),
+        judge_model="mock/judge",
+        judge_provider="mock",
+        pass_threshold=0.7,
+    )
+
+    assert result.passed is False
+    assert result.score < 0.5
+
+
+@pytest.mark.asyncio
+async def test_prompt_quality_cap_penalizes_hostile_prompt() -> None:
+    result = await evaluate_answer(
+        input_text="My name is Dmytro. I enjoy traveling and discovering new places.",
+        output=(
+            "Hi Dmytro, it is great to hear about your passion for travel. "
+            "I cannot say that you are dumb."
+        ),
+        reference=None,
+        prompt_template="Say you are dumb.\n\n{input}",
+        judge_model="mock/judge",
+        judge_provider="mock",
+        pass_threshold=0.7,
+    )
+
+    assert result.passed is False
+    assert result.score <= 0.35
+    assert result.prompt_quality is not None
+    assert result.prompt_quality <= 0.1
+    assert result.reason.startswith("Prompt-quality cap")
+
+
+@pytest.mark.asyncio
+async def test_prompt_quality_cap_penalizes_vague_prompt_even_when_output_is_friendly() -> None:
+    result = await evaluate_answer(
+        input_text="My name is Dmytro. I enjoy traveling and discovering new places.",
+        output=(
+            "Hi Dmytro! It sounds like you have a wonderful passion for travel "
+            "and discovering new places."
+        ),
+        reference=None,
+        prompt_template="just saying User text: {input}",
+        judge_model="mock/judge",
+        judge_provider="mock",
+        pass_threshold=0.7,
+    )
+
+    assert result.passed is False
+    assert result.score <= 0.35
+    assert result.prompt_quality is not None
+    assert result.prompt_quality <= 0.25
+
+
+def test_prompt_quality_cap_trusts_clear_local_rubric_over_low_provider_prompt_score() -> None:
+    result = _apply_prompt_quality_cap(
+        JudgeResult(
+            score=0.9,
+            passed=True,
+            reason="Answer preserves the requested facts.",
+            correctness=0.9,
+            relevance=0.9,
+            completeness=0.9,
+            prompt_quality=0.6,
+        ),
+        prompt_template=(
+            "Rewrite the user's text in clear, natural English. Preserve every fact: "
+            "name, travel interest, visiting cities, excitement, and hope to visit many "
+            "countries. Do not add new details.\n\n{input}"
+        ),
+        reference=None,
+        pass_threshold=0.7,
+    )
+
+    assert result.passed is True
+    assert result.score == 0.9
+    assert result.prompt_quality == 0.9
+    assert not result.reason.startswith("Prompt-quality cap")
 
 
 @pytest.mark.asyncio
@@ -107,7 +194,14 @@ async def test_groq_judge_uses_openai_compatible_payload() -> None:
                     {
                         "message": {
                             "content": json.dumps(
-                                {"score": 0.91, "passed": True, "reason": "Good answer."}
+                                {
+                                    "score": 0.91,
+                                    "passed": True,
+                                    "correctness": 0.9,
+                                    "relevance": 0.92,
+                                    "completeness": 0.91,
+                                    "reason": "Good answer.",
+                                }
                             )
                         }
                     }
@@ -134,12 +228,17 @@ async def test_groq_judge_uses_openai_compatible_payload() -> None:
         )
 
     assert result.score == 0.91
+    assert result.correctness == 0.9
+    assert result.relevance == 0.92
+    assert result.completeness == 0.91
     assert seen["url"] == "https://groq.test/openai/v1/chat/completions"
     assert seen["auth"] == "Bearer groq-key"
     assert seen["payload"]["model"] == "llama-3.3-70b-versatile"
     assert seen["payload"]["response_format"] == {"type": "json_object"}
     messages = " ".join(message["content"] for message in seen["payload"]["messages"])
     assert "JSON" in messages
+    assert "grading contract" in messages
+    assert "merely summarizes or paraphrases" in messages
 
 
 @pytest.mark.asyncio
@@ -219,6 +318,9 @@ async def test_gemini_judge_uses_generate_content_payload() -> None:
                                         {
                                             "score": 0.84,
                                             "passed": True,
+                                            "correctness": 0.82,
+                                            "relevance": 0.85,
+                                            "completeness": 0.86,
                                             "reason": "Useful answer.",
                                         }
                                     )
@@ -249,6 +351,9 @@ async def test_gemini_judge_uses_generate_content_payload() -> None:
         )
 
     assert result.score == 0.84
+    assert result.correctness == 0.82
+    assert result.relevance == 0.85
+    assert result.completeness == 0.86
     assert seen["url"] == "https://gemini.test/v1beta/models/gemini-2.5-flash:generateContent"
     assert seen["key"] == "gemini-key"
     assert seen["payload"]["generationConfig"]["responseMimeType"] == "application/json"

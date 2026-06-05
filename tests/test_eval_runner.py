@@ -54,6 +54,10 @@ async def test_eval_runner_falls_back_to_mock_judge_when_provider_judge_fails(
             return JudgeResult(
                 score=1.0,
                 passed=True,
+                correctness=1.0,
+                relevance=1.0,
+                completeness=1.0,
+                prompt_quality=0.8,
                 reason="Mock judge compared lexical overlap with the reference answer.",
             )
         raise JudgeError("OpenRouter judge stayed unavailable after retries (429): rate limit")
@@ -94,6 +98,10 @@ async def test_eval_runner_falls_back_to_mock_judge_when_provider_judge_fails(
         assert run.avg_score == 1.0
         result = (await session.execute(select(Result).where(Result.run_id == run_id))).scalar_one()
         assert result.score == 1.0
+        assert result.correctness_score == 1.0
+        assert result.relevance_score == 1.0
+        assert result.completeness_score == 1.0
+        assert result.prompt_quality_score == 0.8
         assert result.passed is True
         assert "Judge fallback used after provider error" in result.judge_reason
         assert "OpenRouter judge stayed unavailable" in (result.error or "")

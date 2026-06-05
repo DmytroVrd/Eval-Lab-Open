@@ -104,7 +104,11 @@ AI Eval Lab is a compact FastAPI + vanilla JS evaluation dashboard:
 
 - create test sets and bulk-import cases;
 - run a target LLM against all cases;
-- judge each output with structured LLM-as-judge results;
+- judge each prompt/run with structured LLM-as-judge results;
+- inspect correctness, relevance, completeness, and prompt-quality sub-scores;
+- compare two runs side-by-side to see score regressions and improvements;
+- review a score-over-time chart for each test set;
+- open with a seeded AI incident-response test set for real bad-prompt versus good-prompt runs;
 - store run history and inspect result tables;
 - run locally for free with mocks, or use OpenRouter/Gemini/Groq/Anthropic keys.
 
@@ -147,11 +151,11 @@ The app also spaces real provider requests before sending them:
 
 ```env
 OPENROUTER_MIN_INTERVAL_SECONDS=3.2
-GEMINI_MIN_INTERVAL_SECONDS=12.5
+GEMINI_MIN_INTERVAL_SECONDS=15.5
 GROQ_MIN_INTERVAL_SECONDS=1.0
 ```
 
-The Gemini default is intentionally conservative for the free `gemini-2.5-flash` limit you showed: 5 RPM and 20 RPD. If a provider still returns `429` or `5xx`, the app retries up to 3 attempts with `Retry-After` support or exponential backoff.
+The Gemini default is intentionally below the free `gemini-2.5-flash` limit you showed: roughly 4 RPM instead of the hard 5 RPM cap, with retries also passing through the same limiter. If a provider still returns `429` or `5xx`, the app retries up to 3 attempts with `Retry-After` support or exponential backoff.
 
 When a target model returns an answer but the external judge is rate-limited, the app can fall back to `mock/judge` instead of scoring the case as automatic zero:
 

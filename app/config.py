@@ -37,9 +37,10 @@ class Settings(BaseSettings):
     max_concurrency: int = Field(default=2, ge=1, le=20)
     request_timeout_seconds: float = Field(default=60.0, ge=5.0)
     openrouter_min_interval_seconds: float = Field(default=3.2, ge=0.0)
-    gemini_min_interval_seconds: float = Field(default=12.5, ge=0.0)
+    gemini_min_interval_seconds: float = Field(default=15.5, ge=0.0)
     groq_min_interval_seconds: float = Field(default=1.0, ge=0.0)
     fallback_to_mock_judge_on_error: bool = True
+    seed_demo_data: bool = True
 
     local_mock_without_keys: bool = True
 

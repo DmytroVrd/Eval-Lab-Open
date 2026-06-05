@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Eval Lab</title>
-    <link rel="stylesheet" href="/static/style.css?v=20260603-ui3" />
+    <link rel="stylesheet" href="/static/style.css?v=20260605-cleanup1" />
   </head>
   <body>
     <div class="app-shell">
@@ -56,18 +56,24 @@
               <h2 id="selected-title">No set selected</h2>
               <p id="selected-description">Create or select a test set to begin.</p>
             </div>
-            <div class="metric-strip" aria-label="Selected set metrics">
-              <div>
-                <span id="case-count">0</span>
-                <small>Cases</small>
+            <div class="selected-controls">
+              <div class="metric-strip" aria-label="Selected set metrics">
+                <div>
+                  <span id="case-count">0</span>
+                  <small>Cases</small>
+                </div>
+                <div>
+                  <span id="run-count">0</span>
+                  <small>Runs</small>
+                </div>
+                <div>
+                  <span id="latest-status">Idle</span>
+                  <small>Latest</small>
+                </div>
               </div>
-              <div>
-                <span id="run-count">0</span>
-                <small>Runs</small>
-              </div>
-              <div>
-                <span id="latest-status">Idle</span>
-                <small>Latest</small>
+              <div class="selected-actions">
+                <button id="clear-selected-cases" class="button secondary compact" type="button">Clear Cases</button>
+                <button id="delete-selected-set" class="button danger compact" type="button">Delete Set</button>
               </div>
             </div>
           </div>
@@ -147,13 +153,13 @@
                   <input id="run-max-cases" name="max_cases" type="number" min="1" step="1" value="3" placeholder="All" />
                   <small class="field-hint">3 is safer for free-tier testing</small>
                 </label>
-                <label class="wide-field">
-                  <span>Prompt Template</span>
+                <div class="wide-field prompt-field">
+                  <label for="run-notes">Prompt Template - this changes model behavior</label>
                   <textarea id="run-notes" name="prompt_template" rows="4" required>Answer clearly and concisely:
 
 {input}</textarea>
-                  <small class="field-hint">має містити {input}</small>
-                </label>
+                  <small class="field-hint">Must contain {input}. Cases are test data; this prompt is the instruction being evaluated.</small>
+                </div>
                 <button class="button primary wide-field" type="submit">Start Run</button>
               </form>
             </section>
@@ -194,6 +200,7 @@
             <div class="tabbar" role="tablist" aria-label="Result views">
               <button id="results-tab" class="tab active" type="button" role="tab" aria-selected="true" data-view="results">Results</button>
               <button id="history-tab" class="tab" type="button" role="tab" aria-selected="false" data-view="history">History</button>
+              <button id="compare-tab" class="tab" type="button" role="tab" aria-selected="false" data-view="compare">Compare</button>
             </div>
 
             <div id="results-view" class="table-view active">
@@ -201,6 +208,10 @@
                 <div class="table-title">
                   <h2>Results</h2>
                   <p id="results-run-meta">No run selected</p>
+                  <details id="results-prompt-detail" class="prompt-detail" hidden>
+                    <summary id="results-prompt-summary">Prompt: -</summary>
+                    <pre id="results-prompt-full"></pre>
+                  </details>
                 </div>
                 <button id="reload-results" class="button secondary compact" type="button">Reload</button>
               </div>
@@ -212,13 +223,14 @@
                       <th>Input</th>
                       <th>Output</th>
                       <th>Score</th>
+                      <th>Sub-scores</th>
                       <th>Pass</th>
                       <th>Reason</th>
                     </tr>
                   </thead>
                   <tbody id="results-body">
                     <tr>
-                      <td colspan="6" class="empty-cell">No results loaded</td>
+                      <td colspan="7" class="empty-cell">No results loaded</td>
                     </tr>
                   </tbody>
                 </table>
@@ -227,8 +239,18 @@
 
             <div id="history-view" class="table-view">
               <div class="table-tools">
-                <h2>Run History</h2>
+                <div class="table-title">
+                  <h2>Run History</h2>
+                  <p id="compare-selection-meta">Select two runs to compare</p>
+                </div>
                 <button id="reload-history" class="button secondary compact" type="button">Reload</button>
+              </div>
+              <div class="score-chart" aria-label="Score over time">
+                <div class="chart-header">
+                  <strong>Score Over Time</strong>
+                  <span id="score-chart-meta">No runs loaded</span>
+                </div>
+                <div id="score-chart" class="chart-canvas"></div>
               </div>
               <div class="table-wrap">
                 <table>
@@ -240,12 +262,43 @@
                       <th>Judge</th>
                       <th>Score</th>
                       <th>Started</th>
+                      <th>Compare</th>
                       <th></th>
                     </tr>
                   </thead>
                   <tbody id="history-body">
                     <tr>
-                      <td colspan="7" class="empty-cell">No runs loaded</td>
+                      <td colspan="8" class="empty-cell">No runs loaded</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div id="compare-view" class="table-view">
+              <div class="table-tools">
+                <div class="table-title">
+                  <h2>Run Compare</h2>
+                  <p id="compare-run-meta">Pick two runs in History</p>
+                </div>
+                <button id="run-compare" class="button secondary compact" type="button">Compare</button>
+              </div>
+              <div id="compare-summary" class="compare-summary"></div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Case</th>
+                      <th>Input</th>
+                      <th>Run A</th>
+                      <th>Run B</th>
+                      <th>Delta</th>
+                      <th>Sub-score Deltas</th>
+                    </tr>
+                  </thead>
+                  <tbody id="compare-body">
+                    <tr>
+                      <td colspan="6" class="empty-cell">Select two runs in History</td>
                     </tr>
                   </tbody>
                 </table>
@@ -257,6 +310,6 @@
     </div>
 
     <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
-    <script src="/static/app.js?v=20260603-ui3" defer></script>
+    <script src="/static/app.js?v=20260605-cleanup1" defer></script>
   </body>
 </html>

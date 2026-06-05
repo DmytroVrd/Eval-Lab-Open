@@ -223,6 +223,21 @@ textarea:disabled {
   max-width: 760px;
 }
 
+.selected-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  min-width: min(380px, 100%);
+}
+
+.selected-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .eyebrow {
   margin: 0 0 5px;
   color: var(--accent-strong);
@@ -236,7 +251,6 @@ textarea:disabled {
   display: grid;
   grid-template-columns: repeat(3, minmax(82px, 1fr));
   gap: 8px;
-  min-width: min(380px, 100%);
 }
 
 .metric-strip div,
@@ -338,6 +352,20 @@ textarea:disabled {
   grid-column: 1 / -1;
 }
 
+.prompt-field {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-strong);
+}
+
+.prompt-field > label {
+  font-size: 12px;
+  font-weight: 700;
+}
+
 label {
   display: grid;
   gap: 5px;
@@ -354,6 +382,32 @@ label span {
   color: var(--muted);
   font-size: 12px;
   font-weight: 600;
+}
+
+.prompt-detail {
+  max-width: 980px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.prompt-detail summary {
+  cursor: pointer;
+}
+
+.prompt-detail pre {
+  max-height: 170px;
+  margin: 8px 0 0;
+  padding: 10px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-strong);
+  color: var(--ink);
+  white-space: pre-wrap;
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 input,
@@ -444,6 +498,17 @@ textarea:focus {
 .icon-button:hover {
   border-color: var(--accent);
   color: var(--accent-strong);
+}
+
+.button.danger {
+  background: #ffffff;
+  color: var(--danger);
+  border-color: var(--line-strong);
+}
+
+.button.danger:hover {
+  background: var(--danger-soft);
+  border-color: var(--danger);
 }
 
 .button.compact {
@@ -679,6 +744,137 @@ tbody tr:last-child td {
   font-weight: 800;
 }
 
+.score-chart {
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-strong);
+}
+
+.chart-header,
+.compare-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.chart-header span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.chart-canvas {
+  min-height: 150px;
+  display: grid;
+  place-items: center;
+}
+
+.chart-canvas svg {
+  width: 100%;
+  height: 150px;
+}
+
+.score-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+
+.score-point {
+  fill: #ffffff;
+  stroke: var(--accent-strong);
+  stroke-width: 3;
+}
+
+.subscore-list {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.subscore-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--surface-strong);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.subscore-chip.positive {
+  color: var(--accent-strong);
+  border-color: #b7dfd1;
+  background: var(--accent-soft);
+}
+
+.subscore-chip.negative {
+  color: var(--danger);
+  border-color: #efb8b3;
+  background: var(--danger-soft);
+}
+
+.compare-summary {
+  margin-bottom: 12px;
+  align-items: stretch;
+}
+
+.compare-metric {
+  min-width: 140px;
+  flex: 1;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-strong);
+}
+
+.compare-metric small,
+.compare-metric span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.compare-metric strong {
+  display: block;
+  margin: 5px 0;
+  font-size: 16px;
+}
+
+.compare-cell {
+  display: grid;
+  gap: 5px;
+}
+
+.compare-cell p,
+.compare-cell small {
+  margin: 0;
+}
+
+.compare-cell small {
+  color: var(--muted);
+}
+
+.compare-up td {
+  background: #f1fbf7;
+}
+
+.compare-down td {
+  background: #fff3f2;
+}
+
 .toast-region {
   position: fixed;
   right: 16px;
@@ -740,10 +936,15 @@ tbody tr:last-child td {
   }
 
   .topbar-actions,
+  .selected-controls,
   .metric-strip,
   .run-status-grid,
   .run-form {
     width: 100%;
+  }
+
+  .selected-actions {
+    justify-content: flex-start;
   }
 
   .metric-strip,

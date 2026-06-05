@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db import get_session
-from app.models import TestCase, TestSet
+from app.models import Result, Run, RunStatus, TestCase, TestSet
 from app.schemas import TestCaseCreate, TestCaseRead, TestSetCreate, TestSetRead, TestSetSummary
 
 router = APIRouter(prefix="/test-sets", tags=["test sets"])
@@ -52,6 +52,19 @@ async def read_test_set(
     return test_set
 
 
+@router.delete("/{test_set_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
+async def delete_test_set(
+    test_set_id: int,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    await _get_test_set(session, test_set_id)
+    await _ensure_no_active_runs(session, test_set_id)
+    await _delete_set_data(session, test_set_id)
+    await session.execute(delete(TestSet).where(TestSet.id == test_set_id))
+    await session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.post("/{test_set_id}/cases", response_model=TestCaseRead, status_code=status.HTTP_201_CREATED)
 async def create_case(
     test_set_id: int,
@@ -84,6 +97,18 @@ async def list_cases(
     return list(rows.scalars().all())
 
 
+@router.delete("/{test_set_id}/cases", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
+async def clear_cases(
+    test_set_id: int,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    await _get_test_set(session, test_set_id)
+    await _ensure_no_active_runs(session, test_set_id)
+    await _delete_set_data(session, test_set_id)
+    await session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.post(
     "/{test_set_id}/cases/bulk",
     response_model=list[TestCaseRead],
@@ -111,6 +136,35 @@ async def create_cases_bulk(
     for case in cases:
         await session.refresh(case)
     return cases
+
+
+async def _ensure_no_active_runs(session: AsyncSession, test_set_id: int) -> None:
+    active_run = await session.scalar(
+        select(Run.id)
+        .where(Run.test_set_id == test_set_id)
+        .where(Run.status.in_([RunStatus.pending, RunStatus.running]))
+        .limit(1)
+    )
+    if active_run is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Wait for the active run to finish before deleting this set.",
+        )
+
+
+async def _delete_set_data(session: AsyncSession, test_set_id: int) -> None:
+    run_ids = select(Run.id).where(Run.test_set_id == test_set_id)
+    case_ids = select(TestCase.id).where(TestCase.test_set_id == test_set_id)
+    await session.execute(
+        delete(Result).where(
+            or_(
+                Result.run_id.in_(run_ids),
+                Result.test_case_id.in_(case_ids),
+            )
+        )
+    )
+    await session.execute(delete(Run).where(Run.test_set_id == test_set_id))
+    await session.execute(delete(TestCase).where(TestCase.test_set_id == test_set_id))
 
 
 async def _get_test_set(session: AsyncSession, test_set_id: int) -> TestSet:

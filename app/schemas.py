@@ -145,10 +145,59 @@ class ResultRead(BaseModel):
     reference: str | None
     output: str
     score: float
+    correctness_score: float | None
+    relevance_score: float | None
+    completeness_score: float | None
+    prompt_quality_score: float | None
     passed: bool
     judge_reason: str
     latency_ms: int
     error: str | None
+
+
+class RunCompareMeta(BaseModel):
+    id: int
+    target_model: str
+    judge_model: str
+    judge_provider: str
+    prompt_template: str
+    avg_score: float | None
+    pass_rate: float | None
+    created_at: datetime
+
+
+class RunCompareRow(BaseModel):
+    test_case_id: int
+    input: str
+    reference: str | None
+    output_a: str
+    output_b: str
+    score_a: float | None
+    score_b: float | None
+    delta_score: float | None
+    correctness_a: float | None
+    correctness_b: float | None
+    delta_correctness: float | None
+    relevance_a: float | None
+    relevance_b: float | None
+    delta_relevance: float | None
+    completeness_a: float | None
+    completeness_b: float | None
+    delta_completeness: float | None
+    prompt_quality_a: float | None
+    prompt_quality_b: float | None
+    delta_prompt_quality: float | None
+    passed_a: bool | None
+    passed_b: bool | None
+    reason_a: str | None
+    reason_b: str | None
+
+
+class RunCompareRead(BaseModel):
+    run_a: RunCompareMeta
+    run_b: RunCompareMeta
+    avg_delta_score: float | None
+    rows: list[RunCompareRow]
 
 
 class AppConfigRead(BaseModel):

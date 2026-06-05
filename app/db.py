@@ -51,7 +51,8 @@ async def init_db() -> None:
 
 def _ensure_runtime_columns(connection) -> None:
     inspector = inspect(connection)
-    if "runs" not in inspector.get_table_names():
+    table_names = inspector.get_table_names()
+    if "runs" not in table_names:
         return
 
     columns = {column["name"] for column in inspector.get_columns("runs")}
@@ -59,3 +60,16 @@ def _ensure_runtime_columns(connection) -> None:
         connection.execute(text("ALTER TABLE runs ADD COLUMN temperature FLOAT"))
     if "max_cases" not in columns:
         connection.execute(text("ALTER TABLE runs ADD COLUMN max_cases INTEGER"))
+
+    if "results" not in table_names:
+        return
+
+    result_columns = {column["name"] for column in inspector.get_columns("results")}
+    if "correctness_score" not in result_columns:
+        connection.execute(text("ALTER TABLE results ADD COLUMN correctness_score FLOAT"))
+    if "relevance_score" not in result_columns:
+        connection.execute(text("ALTER TABLE results ADD COLUMN relevance_score FLOAT"))
+    if "completeness_score" not in result_columns:
+        connection.execute(text("ALTER TABLE results ADD COLUMN completeness_score FLOAT"))
+    if "prompt_quality_score" not in result_columns:
+        connection.execute(text("ALTER TABLE results ADD COLUMN prompt_quality_score FLOAT"))

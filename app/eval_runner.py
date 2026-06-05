@@ -112,6 +112,10 @@ async def _process_case(
 ) -> None:
     output = ""
     score = 0.0
+    correctness_score: float | None = None
+    relevance_score: float | None = None
+    completeness_score: float | None = None
+    prompt_quality_score: float | None = None
     passed = False
     reason = ""
     latency_ms = 0
@@ -138,12 +142,17 @@ async def _process_case(
                 input_text=case.input,
                 output=output,
                 reference=case.reference,
+                prompt_template=prompt_template,
                 judge_model=judge_model,
                 judge_provider=judge_provider,
                 pass_threshold=settings.pass_threshold,
                 settings=settings,
             )
             score = judge_result.score
+            correctness_score = judge_result.correctness
+            relevance_score = judge_result.relevance
+            completeness_score = judge_result.completeness
+            prompt_quality_score = judge_result.prompt_quality
             passed = judge_result.passed
             reason = judge_result.reason
         except JudgeError as exc:
@@ -153,12 +162,17 @@ async def _process_case(
                     input_text=case.input,
                     output=output,
                     reference=case.reference,
+                    prompt_template=prompt_template,
                     judge_model="mock/judge",
                     judge_provider="mock",
                     pass_threshold=settings.pass_threshold,
                     settings=settings,
                 )
                 score = judge_result.score
+                correctness_score = judge_result.correctness
+                relevance_score = judge_result.relevance
+                completeness_score = judge_result.completeness
+                prompt_quality_score = judge_result.prompt_quality
                 passed = judge_result.passed
                 reason = (
                     "Judge fallback used after provider error: "
@@ -177,6 +191,10 @@ async def _process_case(
                 test_case_id=case.id,
                 output=output,
                 score=score,
+                correctness_score=correctness_score,
+                relevance_score=relevance_score,
+                completeness_score=completeness_score,
+                prompt_quality_score=prompt_quality_score,
                 passed=passed,
                 judge_reason=reason,
                 latency_ms=latency_ms,
