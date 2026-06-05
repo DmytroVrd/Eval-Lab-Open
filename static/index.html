@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Eval Lab</title>
-    <link rel="stylesheet" href="/static/style.css" />
+    <link rel="stylesheet" href="/static/style.css?v=20260603-ui3" />
   </head>
   <body>
     <div class="app-shell">
@@ -72,6 +72,16 @@
             </div>
           </div>
 
+          <section class="quick-start" aria-label="Quick test guide">
+            <div>
+              <strong>Quick test</strong>
+              <span>1. Create/select set</span>
+              <span>2. Load sample cases</span>
+              <span>3. Pick model and start</span>
+            </div>
+            <p>For real keys, keep Max cases low first. Results and History are below the run status.</p>
+          </section>
+
           <div class="work-grid">
             <section class="panel">
               <div class="panel-heading">
@@ -88,6 +98,7 @@
                   <textarea id="bulk-cases-input" rows="8" spellcheck="false" placeholder='[{"input":"question","expected":"answer"}]'></textarea>
                 </label>
                 <div class="form-row">
+                  <button id="load-sample-cases" class="button secondary" type="button">Load Sample</button>
                   <button class="button primary" type="submit">Add Cases</button>
                   <button id="clear-bulk-cases" class="button secondary" type="button">Clear</button>
                 </div>
@@ -121,13 +132,11 @@
               <form id="run-form" class="run-form">
                 <label>
                   <span>Model</span>
-                  <input id="run-model" name="model" list="model-options" autocomplete="off" required />
-                  <datalist id="model-options"></datalist>
+                  <select id="run-model" name="model" required></select>
                 </label>
                 <label>
                   <span>Judge</span>
-                  <input id="run-judge" name="judge_model" list="judge-options" autocomplete="off" />
-                  <datalist id="judge-options"></datalist>
+                  <select id="run-judge" name="judge_model"></select>
                 </label>
                 <label>
                   <span>Temperature</span>
@@ -135,7 +144,8 @@
                 </label>
                 <label>
                   <span>Max cases</span>
-                  <input id="run-max-cases" name="max_cases" type="number" min="1" step="1" placeholder="All" />
+                  <input id="run-max-cases" name="max_cases" type="number" min="1" step="1" value="3" placeholder="All" />
+                  <small class="field-hint">3 is safer for free-tier testing</small>
                 </label>
                 <label class="wide-field">
                   <span>Prompt Template</span>
@@ -188,7 +198,10 @@
 
             <div id="results-view" class="table-view active">
               <div class="table-tools">
-                <h2>Results</h2>
+                <div class="table-title">
+                  <h2>Results</h2>
+                  <p id="results-run-meta">No run selected</p>
+                </div>
                 <button id="reload-results" class="button secondary compact" type="button">Reload</button>
               </div>
               <div class="table-wrap">
@@ -223,7 +236,8 @@
                     <tr>
                       <th>Run</th>
                       <th>Status</th>
-                      <th>Model</th>
+                      <th>Target</th>
+                      <th>Judge</th>
                       <th>Score</th>
                       <th>Started</th>
                       <th></th>
@@ -231,7 +245,7 @@
                   </thead>
                   <tbody id="history-body">
                     <tr>
-                      <td colspan="6" class="empty-cell">No runs loaded</td>
+                      <td colspan="7" class="empty-cell">No runs loaded</td>
                     </tr>
                   </tbody>
                 </table>
@@ -243,6 +257,6 @@
     </div>
 
     <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
-    <script src="/static/app.js" defer></script>
+    <script src="/static/app.js?v=20260603-ui3" defer></script>
   </body>
 </html>

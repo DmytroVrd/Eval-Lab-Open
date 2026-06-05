@@ -1,6 +1,6 @@
 # AI Eval Lab
 
-AI Eval Lab is a small web app for regression-testing prompts and LLM models. Create a test set, run a target model through OpenRouter, Gemini, Groq, or local mock mode, judge each answer, and review scores in a dashboard.
+AI Eval Lab is a small web app for regression-testing prompts and LLM models. Create a test set, run a target model through OpenRouter, Gemini, Groq, or local mock mode, judge each answer through OpenRouter, Gemini, Groq, Anthropic, or mock mode, and review scores in a dashboard.
 
 ## Українською
 
@@ -131,13 +131,35 @@ OPENROUTER_API_KEY=sk-or-...
 GEMINI_API_KEY=...
 GROQ_API_KEY=gsk_...
 DEFAULT_TARGET_MODEL=gemini/<model>
-DEFAULT_JUDGE_PROVIDER=openrouter
-DEFAULT_JUDGE_MODEL=openrouter/free
+DEFAULT_JUDGE_PROVIDER=groq
+DEFAULT_JUDGE_MODEL=groq/<model>
 ```
 
-Replace `<model>` with a model ID from the provider. Use `gemini/<model>` for Gemini target models and `groq/<model>` for Groq target models. Judges currently support OpenRouter, Anthropic, or mock mode.
+Replace `<model>` with a model ID from the provider. Use `gemini/<model>` for Gemini models and `groq/<model>` for Groq models. Groq is a good judge choice when OpenRouter free judge calls are exhausted or temporarily rate-limited.
 
 Free provider tiers can still have rate limits, model availability changes, or billing requirements. `LOCAL_MOCK_WITHOUT_KEYS=true` only prevents external provider calls when the matching API keys are empty.
+
+### Rate-Limit Safety
+
+Each evaluated case can use more than one external request. For example, Gemini target + OpenRouter judge means one Gemini call and one OpenRouter call per case. Keep `MAX_CONCURRENCY=2` and use `max_cases=3` while testing free tiers.
+
+The app also spaces real provider requests before sending them:
+
+```env
+OPENROUTER_MIN_INTERVAL_SECONDS=3.2
+GEMINI_MIN_INTERVAL_SECONDS=12.5
+GROQ_MIN_INTERVAL_SECONDS=1.0
+```
+
+The Gemini default is intentionally conservative for the free `gemini-2.5-flash` limit you showed: 5 RPM and 20 RPD. If a provider still returns `429` or `5xx`, the app retries up to 3 attempts with `Retry-After` support or exponential backoff.
+
+When a target model returns an answer but the external judge is rate-limited, the app can fall back to `mock/judge` instead of scoring the case as automatic zero:
+
+```env
+FALLBACK_TO_MOCK_JUDGE_ON_ERROR=true
+```
+
+The result reason will say that fallback was used, so real LLM-judge failures are still visible.
 
 ### API Surface
 

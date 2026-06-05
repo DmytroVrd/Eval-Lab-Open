@@ -9,6 +9,7 @@ import httpx
 
 from app.config import Settings, get_settings
 from app.llm_http import RETRY_STATUSES, post_with_retries
+from app.rate_limit import wait_for_provider_slot
 
 
 class LLMCallError(RuntimeError):
@@ -66,6 +67,8 @@ async def call_target_model(
     http = client or httpx.AsyncClient(timeout=settings.request_timeout_seconds)
     try:
         if provider == "gemini":
+            if close_client:
+                await wait_for_provider_slot("gemini", settings.gemini_min_interval_seconds)
             output = await _call_gemini(
                 http=http,
                 prompt=prompt,
@@ -74,6 +77,8 @@ async def call_target_model(
                 settings=settings,
             )
         elif provider == "groq":
+            if close_client:
+                await wait_for_provider_slot("groq", settings.groq_min_interval_seconds)
             output = await _call_openai_compatible(
                 http=http,
                 prompt=prompt,
@@ -84,6 +89,11 @@ async def call_target_model(
                 provider_name="Groq",
             )
         else:
+            if close_client:
+                await wait_for_provider_slot(
+                    "openrouter",
+                    settings.openrouter_min_interval_seconds,
+                )
             output = await _call_openai_compatible(
                 http=http,
                 prompt=prompt,
@@ -191,9 +201,18 @@ async def _call_gemini(
     )
     response.raise_for_status()
     payload = response.json()
-    candidate = payload.get("candidates", [{}])[0]
+    candidates = payload.get("candidates") or []
+    if not candidates:
+        prompt_feedback = payload.get("promptFeedback") or payload.get("prompt_feedback")
+        raise LLMCallError(f"Gemini returned no candidates. Feedback: {prompt_feedback or payload}")
+    candidate = candidates[0]
     content = candidate.get("content", {})
     output = _gemini_parts_to_text(content.get("parts")).strip()
     if not output:
-        raise LLMCallError("Gemini returned an empty response.")
+        finish_reason = candidate.get("finishReason") or candidate.get("finish_reason")
+        safety_ratings = candidate.get("safetyRatings") or candidate.get("safety_ratings")
+        raise LLMCallError(
+            "Gemini returned an empty response. "
+            f"Finish reason: {finish_reason}; safety ratings: {safety_ratings}"
+        )
     return output

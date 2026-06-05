@@ -11,10 +11,21 @@ def test_health_and_config(client: TestClient) -> None:
     payload = config.json()
     assert payload["pass_threshold"] == 0.7
     assert payload["max_concurrency"] == 2
+    for key in (
+        "openrouter_min_interval_seconds",
+        "gemini_min_interval_seconds",
+        "groq_min_interval_seconds",
+    ):
+        assert isinstance(payload[key], int | float)
+        assert payload[key] >= 0
+    assert payload["fallback_to_mock_judge_on_error"] is True
     assert "mock/target" in payload["models"]
     assert any(model.startswith("gemini/") for model in payload["models"])
     assert any(model.startswith("groq/") for model in payload["models"])
-    assert payload["judge_models"] in (["openrouter/free", "mock/judge"], ["mock/judge"])
+    assert any(model.startswith("gemini/") for model in payload["judge_models"])
+    assert any(model.startswith("groq/") for model in payload["judge_models"])
+    assert "openrouter/free" in payload["judge_models"]
+    assert "mock/judge" in payload["judge_models"]
     assert "meta-llama/llama-3.3-8b-instruct:free" not in payload["models"]
     assert "google/gemma-3-12b-it:free" not in payload["models"]
     assert "meta-llama/llama-3.3-8b-instruct:free" not in payload["judge_models"]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -30,6 +31,17 @@ def _render_prompt(template: str, input_text: str) -> str:
     except KeyError as exc:
         missing = exc.args[0]
         raise ValueError(f"Unknown prompt placeholder: {{{missing}}}") from exc
+
+
+def _short_error(error: Exception, limit: int = 220) -> str:
+    text = " ".join(str(error).split())
+    text = re.sub(r"Bearer\s+[A-Za-z0-9._\-]+", "Bearer [redacted]", text)
+    text = re.sub(r"\bsk-[A-Za-z0-9._\-]+", "sk-[redacted]", text)
+    text = re.sub(r"\bgsk_[A-Za-z0-9._\-]+", "gsk_[redacted]", text)
+    text = re.sub(r"\bAIza[A-Za-z0-9._\-]+", "AIza[redacted]", text)
+    if len(text) > limit:
+        return f"{text[: limit - 3]}..."
+    return text or error.__class__.__name__
 
 
 async def run_eval(run_id: int, settings: Settings | None = None) -> None:
@@ -115,7 +127,7 @@ async def _process_case(
         )
     except (LLMCallError, ValueError) as exc:
         error = str(exc)
-        reason = "Target model call failed; the case was scored as 0."
+        reason = f"Target model call failed: {_short_error(exc)}"
     except Exception as exc:  # pragma: no cover - defensive per-case boundary
         error = f"Unexpected target error: {exc}"
         reason = "Unexpected target error; the case was scored as 0."
@@ -136,7 +148,24 @@ async def _process_case(
             reason = judge_result.reason
         except JudgeError as exc:
             error = str(exc)
-            reason = "Judge call failed; the case was scored as 0."
+            if settings.fallback_to_mock_judge_on_error:
+                judge_result = await evaluate_answer(
+                    input_text=case.input,
+                    output=output,
+                    reference=case.reference,
+                    judge_model="mock/judge",
+                    judge_provider="mock",
+                    pass_threshold=settings.pass_threshold,
+                    settings=settings,
+                )
+                score = judge_result.score
+                passed = judge_result.passed
+                reason = (
+                    "Judge fallback used after provider error: "
+                    f"{_short_error(exc)} Fallback score: {judge_result.reason}"
+                )
+            else:
+                reason = f"Judge call failed: {_short_error(exc)}"
         except Exception as exc:  # pragma: no cover - defensive per-case boundary
             error = f"Unexpected judge error: {exc}"
             reason = "Unexpected judge error; the case was scored as 0."

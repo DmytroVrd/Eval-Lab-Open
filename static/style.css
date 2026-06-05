@@ -41,6 +41,7 @@ body {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
 }
@@ -51,6 +52,7 @@ button {
 
 button:disabled,
 input:disabled,
+select:disabled,
 textarea:disabled {
   cursor: not-allowed;
   opacity: 0.62;
@@ -178,9 +180,21 @@ textarea:disabled {
   line-height: 1.2;
 }
 
+.table-title {
+  min-width: 0;
+}
+
 .panel-heading p,
 .table-tools p {
   font-size: 12px;
+}
+
+.table-title p {
+  margin: 3px 0 0;
+  max-width: min(760px, 70vw);
+  color: var(--muted);
+  font-weight: 650;
+  overflow-wrap: anywhere;
 }
 
 .workspace-header {
@@ -255,6 +269,54 @@ textarea:disabled {
   letter-spacing: 0.06em;
 }
 
+.quick-start {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.quick-start div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.quick-start strong,
+.quick-start span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+}
+
+.quick-start strong {
+  color: var(--accent-strong);
+  font-weight: 800;
+}
+
+.quick-start span {
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  background: var(--surface-strong);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.quick-start p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .work-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.02fr) minmax(360px, 0.98fr);
@@ -295,6 +357,7 @@ label span {
 }
 
 input,
+select,
 textarea {
   width: 100%;
   min-width: 0;
@@ -315,6 +378,7 @@ textarea {
 }
 
 input:focus,
+select:focus,
 textarea:focus {
   border-color: var(--accent);
   box-shadow: var(--focus);
@@ -592,6 +656,14 @@ tbody tr:last-child td {
   border-bottom: 0;
 }
 
+.history-row.active td {
+  background: var(--accent-soft);
+}
+
+.history-row.active td:first-child {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
 .empty-cell {
   color: var(--muted);
   text-align: center;
@@ -661,7 +733,8 @@ tbody tr:last-child td {
 
 @media (max-width: 760px) {
   .topbar,
-  .workspace-header {
+  .workspace-header,
+  .quick-start {
     align-items: flex-start;
     flex-direction: column;
   }

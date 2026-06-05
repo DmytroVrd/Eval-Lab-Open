@@ -3,12 +3,14 @@ from __future__ import annotations
 import json
 import re
 from typing import Any, Literal
+from urllib.parse import quote
 
 import httpx
 from pydantic import BaseModel, Field, ValidationError
 
 from app.config import Settings, get_settings
 from app.llm_http import RETRY_STATUSES, post_with_retries
+from app.rate_limit import wait_for_provider_slot
 
 
 class JudgeError(RuntimeError):
@@ -67,7 +69,7 @@ def _judge_prompt(input_text: str, output: str, reference: str | None) -> str:
         f"{output}\n\n"
         "Reference answer:\n"
         f"{reference_text}\n\n"
-        "Return the evaluation as structured data only."
+        'Return only a valid JSON object like {"score": 0.8, "passed": true, "reason": "short reason"}.'
     )
 
 
@@ -75,7 +77,8 @@ def _system_rubric(pass_threshold: float) -> str:
     return (
         "You are a strict evaluator of LLM answer quality. Judge factual "
         "correctness, relevance to the question, and completeness. If a reference "
-        "answer is provided, compare against it. Return score from 0 to 1, "
+        "answer is provided, compare against it. Return only valid JSON with "
+        '"score", "passed", and "reason". Return score from 0 to 1, '
         f"passed = score >= {pass_threshold}, and a short reason."
     )
 
@@ -90,13 +93,27 @@ def _extract_json(text: str) -> dict[str, Any]:
         return json.loads(match.group(0))
 
 
+def _gemini_parts_to_text(parts: Any) -> str:
+    if not isinstance(parts, list):
+        return ""
+    texts: list[str] = []
+    for part in parts:
+        if isinstance(part, dict) and isinstance(part.get("text"), str):
+            texts.append(part["text"])
+    return "\n".join(texts)
+
+
+def _strip_provider_prefix(model: str, provider: str) -> str:
+    return model.removeprefix(f"{provider}/")
+
+
 async def evaluate_answer(
     *,
     input_text: str,
     output: str,
     reference: str | None,
     judge_model: str,
-    judge_provider: Literal["openrouter", "anthropic", "mock"] | str = "openrouter",
+    judge_provider: Literal["openrouter", "anthropic", "gemini", "groq", "mock"] | str = "openrouter",
     pass_threshold: float | None = None,
     settings: Settings | None = None,
     client: httpx.AsyncClient | None = None,
@@ -121,6 +138,42 @@ async def evaluate_answer(
                 pass_threshold=threshold,
             )
         return await _evaluate_with_anthropic(
+            input_text=input_text,
+            output=output,
+            reference=reference,
+            judge_model=judge_model,
+            pass_threshold=threshold,
+            settings=settings,
+            client=client,
+        )
+
+    if judge_provider == "gemini" or judge_model.startswith("gemini/"):
+        if settings.local_mock_without_keys and not settings.gemini_api_key:
+            return _mock_judge(
+                input_text=input_text,
+                output=output,
+                reference=reference,
+                pass_threshold=threshold,
+            )
+        return await _evaluate_with_gemini(
+            input_text=input_text,
+            output=output,
+            reference=reference,
+            judge_model=judge_model,
+            pass_threshold=threshold,
+            settings=settings,
+            client=client,
+        )
+
+    if judge_provider == "groq" or judge_model.startswith("groq/"):
+        if settings.local_mock_without_keys and not settings.groq_api_key:
+            return _mock_judge(
+                input_text=input_text,
+                output=output,
+                reference=reference,
+                pass_threshold=threshold,
+            )
+        return await _evaluate_with_groq(
             input_text=input_text,
             output=output,
             reference=reference,
@@ -176,6 +229,7 @@ async def _evaluate_with_openrouter(
                     reference=reference,
                     pass_threshold=pass_threshold,
                     use_response_format=True,
+                    throttle=close_client,
                 )
                 if _is_response_format_unsupported(response):
                     response = await _post_openrouter_judge(
@@ -187,6 +241,7 @@ async def _evaluate_with_openrouter(
                         reference=reference,
                         pass_threshold=pass_threshold,
                         use_response_format=False,
+                        throttle=close_client,
                     )
                 response.raise_for_status()
                 payload = response.json()
@@ -202,7 +257,10 @@ async def _evaluate_with_openrouter(
                         "OpenRouter judge stayed unavailable after retries "
                         f"({exc.response.status_code}): {detail}"
                     ) from exc
-                last_error = exc
+                detail = exc.response.text[:500]
+                raise JudgeError(
+                    f"OpenRouter judge error {exc.response.status_code}: {detail}"
+                ) from exc
             except (httpx.HTTPError, KeyError, IndexError, ValueError, ValidationError) as exc:
                 last_error = exc
         raise JudgeError(f"OpenRouter judge returned invalid structured output: {last_error}")
@@ -221,6 +279,7 @@ async def _post_openrouter_judge(
     reference: str | None,
     pass_threshold: float,
     use_response_format: bool,
+    throttle: bool,
 ) -> httpx.Response:
     payload: dict[str, Any] = {
         "model": judge_model,
@@ -235,6 +294,9 @@ async def _post_openrouter_judge(
     }
     if use_response_format:
         payload["response_format"] = {"type": "json_object"}
+
+    if throttle:
+        await wait_for_provider_slot("openrouter", settings.openrouter_min_interval_seconds)
 
     return await post_with_retries(
         http,
@@ -252,7 +314,199 @@ def _is_response_format_unsupported(response: httpx.Response) -> bool:
     if response.status_code != 400:
         return False
     text = response.text.lower()
-    return "response_format" in text and ("unsupported" in text or "not supported" in text)
+    return (
+        ("response_format" in text and ("unsupported" in text or "not supported" in text))
+        or ("must contain the word" in text and "json" in text)
+    )
+
+
+async def _evaluate_with_groq(
+    *,
+    input_text: str,
+    output: str,
+    reference: str | None,
+    judge_model: str,
+    pass_threshold: float,
+    settings: Settings,
+    client: httpx.AsyncClient | None,
+) -> JudgeResult:
+    if not settings.groq_api_key:
+        raise JudgeError("GROQ_API_KEY is required for Groq judge calls.")
+
+    close_client = client is None
+    http = client or httpx.AsyncClient(timeout=settings.request_timeout_seconds)
+    try:
+        last_error: Exception | None = None
+        for _ in range(2):
+            try:
+                response = await _post_openai_compatible_judge(
+                    http=http,
+                    base_url=settings.groq_base_url,
+                    api_key=settings.groq_api_key,
+                    provider_name="Groq",
+                    provider_key="groq",
+                    min_interval_seconds=settings.groq_min_interval_seconds,
+                    judge_model=_strip_provider_prefix(judge_model, "groq"),
+                    input_text=input_text,
+                    output=output,
+                    reference=reference,
+                    pass_threshold=pass_threshold,
+                    use_response_format=True,
+                    throttle=close_client,
+                )
+                if _is_response_format_unsupported(response):
+                    response = await _post_openai_compatible_judge(
+                        http=http,
+                        base_url=settings.groq_base_url,
+                        api_key=settings.groq_api_key,
+                        provider_name="Groq",
+                        provider_key="groq",
+                        min_interval_seconds=settings.groq_min_interval_seconds,
+                        judge_model=_strip_provider_prefix(judge_model, "groq"),
+                        input_text=input_text,
+                        output=output,
+                        reference=reference,
+                        pass_threshold=pass_threshold,
+                        use_response_format=False,
+                        throttle=close_client,
+                    )
+                response.raise_for_status()
+                payload = response.json()
+                content = payload["choices"][0]["message"]["content"]
+                data = _extract_json(content)
+                result = JudgeResult.model_validate(data)
+                passed = result.score >= pass_threshold
+                return result.model_copy(update={"passed": passed})
+            except httpx.HTTPStatusError as exc:
+                detail = exc.response.text[:500]
+                if exc.response.status_code in RETRY_STATUSES:
+                    raise JudgeError(
+                        "Groq judge stayed unavailable after retries "
+                        f"({exc.response.status_code}): {detail}"
+                    ) from exc
+                raise JudgeError(f"Groq judge error {exc.response.status_code}: {detail}") from exc
+            except (httpx.HTTPError, KeyError, IndexError, ValueError, ValidationError) as exc:
+                last_error = exc
+        raise JudgeError(f"Groq judge returned invalid structured output: {last_error}")
+    finally:
+        if close_client:
+            await http.aclose()
+
+
+async def _post_openai_compatible_judge(
+    *,
+    http: httpx.AsyncClient,
+    base_url: str,
+    api_key: str,
+    provider_name: str,
+    provider_key: str,
+    min_interval_seconds: float,
+    judge_model: str,
+    input_text: str,
+    output: str,
+    reference: str | None,
+    pass_threshold: float,
+    use_response_format: bool,
+    throttle: bool,
+) -> httpx.Response:
+    payload: dict[str, Any] = {
+        "model": judge_model,
+        "messages": [
+            {"role": "system", "content": _system_rubric(pass_threshold)},
+            {"role": "user", "content": _judge_prompt(input_text, output, reference)},
+        ],
+        "temperature": 0,
+    }
+    if use_response_format:
+        payload["response_format"] = {"type": "json_object"}
+
+    if throttle:
+        await wait_for_provider_slot(provider_key, min_interval_seconds)
+
+    return await post_with_retries(
+        http,
+        f"{base_url.rstrip('/')}/chat/completions",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "X-Title": "AI Eval Lab",
+        },
+        json_payload=payload,
+    )
+
+
+async def _evaluate_with_gemini(
+    *,
+    input_text: str,
+    output: str,
+    reference: str | None,
+    judge_model: str,
+    pass_threshold: float,
+    settings: Settings,
+    client: httpx.AsyncClient | None,
+) -> JudgeResult:
+    if not settings.gemini_api_key:
+        raise JudgeError("GEMINI_API_KEY is required for Gemini judge calls.")
+
+    close_client = client is None
+    http = client or httpx.AsyncClient(timeout=settings.request_timeout_seconds)
+    model = _strip_provider_prefix(judge_model, "gemini")
+    try:
+        last_error: Exception | None = None
+        for _ in range(2):
+            try:
+                if close_client:
+                    await wait_for_provider_slot("gemini", settings.gemini_min_interval_seconds)
+                response = await post_with_retries(
+                    http,
+                    f"{settings.gemini_base_url.rstrip('/')}/models/{quote(model, safe='')}:generateContent",
+                    headers={
+                        "x-goog-api-key": settings.gemini_api_key,
+                        "Content-Type": "application/json",
+                    },
+                    json_payload={
+                        "contents": [
+                            {
+                                "parts": [
+                                    {
+                                        "text": (
+                                            f"{_system_rubric(pass_threshold)}\n\n"
+                                            f"{_judge_prompt(input_text, output, reference)}\n\n"
+                                            "Return only valid JSON with score, passed, and reason."
+                                        )
+                                    }
+                                ]
+                            }
+                        ],
+                        "generationConfig": {
+                            "temperature": 0,
+                            "responseMimeType": "application/json",
+                        },
+                    },
+                )
+                response.raise_for_status()
+                payload = response.json()
+                candidate = payload.get("candidates", [{}])[0]
+                content = candidate.get("content", {})
+                text = _gemini_parts_to_text(content.get("parts"))
+                data = _extract_json(text)
+                result = JudgeResult.model_validate(data)
+                passed = result.score >= pass_threshold
+                return result.model_copy(update={"passed": passed})
+            except httpx.HTTPStatusError as exc:
+                detail = exc.response.text[:500]
+                if exc.response.status_code in RETRY_STATUSES:
+                    raise JudgeError(
+                        "Gemini judge stayed unavailable after retries "
+                        f"({exc.response.status_code}): {detail}"
+                    ) from exc
+                raise JudgeError(f"Gemini judge error {exc.response.status_code}: {detail}") from exc
+            except (httpx.HTTPError, KeyError, IndexError, ValueError, ValidationError) as exc:
+                last_error = exc
+        raise JudgeError(f"Gemini judge returned invalid structured output: {last_error}")
+    finally:
+        if close_client:
+            await http.aclose()
 
 
 async def _evaluate_with_anthropic(

@@ -30,12 +30,16 @@ class Settings(BaseSettings):
     default_target_model: str = "openrouter/free"
     default_gemini_model: str = "gemini-2.5-flash"
     default_groq_model: str = "llama-3.3-70b-versatile"
-    default_judge_provider: Literal["openrouter", "anthropic", "mock"] = "openrouter"
+    default_judge_provider: Literal["openrouter", "anthropic", "gemini", "groq", "mock"] = "openrouter"
     default_judge_model: str = "openrouter/free"
 
     pass_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
     max_concurrency: int = Field(default=2, ge=1, le=20)
     request_timeout_seconds: float = Field(default=60.0, ge=5.0)
+    openrouter_min_interval_seconds: float = Field(default=3.2, ge=0.0)
+    gemini_min_interval_seconds: float = Field(default=12.5, ge=0.0)
+    groq_min_interval_seconds: float = Field(default=1.0, ge=0.0)
+    fallback_to_mock_judge_on_error: bool = True
 
     local_mock_without_keys: bool = True
 

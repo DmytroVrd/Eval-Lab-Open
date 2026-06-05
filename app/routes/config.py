@@ -19,7 +19,14 @@ async def read_config() -> AppConfigRead:
             f"groq/{settings.default_groq_model}",
         ]
     )
-    judge_models = _unique([settings.default_judge_model, "mock/judge"])
+    judge_models = _unique(
+        [
+            settings.default_judge_model,
+            f"groq/{settings.default_groq_model}",
+            f"gemini/{settings.default_gemini_model}",
+            "mock/judge",
+        ]
+    )
     return AppConfigRead(
         default_target_model=settings.default_target_model,
         default_model=settings.default_target_model,
@@ -29,6 +36,10 @@ async def read_config() -> AppConfigRead:
         judge_models=judge_models,
         pass_threshold=settings.pass_threshold,
         max_concurrency=settings.max_concurrency,
+        openrouter_min_interval_seconds=settings.openrouter_min_interval_seconds,
+        gemini_min_interval_seconds=settings.gemini_min_interval_seconds,
+        groq_min_interval_seconds=settings.groq_min_interval_seconds,
+        fallback_to_mock_judge_on_error=settings.fallback_to_mock_judge_on_error,
         openrouter_configured=bool(settings.openrouter_api_key),
         anthropic_configured=bool(settings.anthropic_api_key),
         gemini_configured=bool(settings.gemini_api_key),

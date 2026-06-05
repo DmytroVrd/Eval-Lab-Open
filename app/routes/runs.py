@@ -30,11 +30,19 @@ async def create_run(
     if not case_count:
         raise HTTPException(status_code=400, detail="Add at least one test case before running evals.")
 
+    judge_model = payload.judge_model or settings.default_judge_model
+    judge_provider = payload.judge_provider or _infer_judge_provider(
+        judge_model,
+        settings.default_judge_provider,
+    )
+    if judge_model.startswith("mock/"):
+        judge_provider = "mock"
+
     run = Run(
         test_set_id=payload.test_set_id,
         target_model=payload.target_model or settings.default_target_model,
-        judge_model=payload.judge_model or settings.default_judge_model,
-        judge_provider=payload.judge_provider or settings.default_judge_provider,
+        judge_model=judge_model,
+        judge_provider=judge_provider,
         prompt_template=payload.prompt_template or "Answer the question clearly:\n\n{input}",
         temperature=payload.temperature,
         max_cases=payload.max_cases,
@@ -45,6 +53,16 @@ async def create_run(
     await session.refresh(run)
     background_tasks.add_task(run_eval, run.id)
     return RunQueued(run_id=run.id)
+
+
+def _infer_judge_provider(judge_model: str, default_provider: str) -> str:
+    if judge_model.startswith("mock/"):
+        return "mock"
+    if judge_model.startswith("gemini/"):
+        return "gemini"
+    if judge_model.startswith("groq/"):
+        return "groq"
+    return default_provider
 
 
 @router.get("/runs/{run_id}", response_model=RunRead)

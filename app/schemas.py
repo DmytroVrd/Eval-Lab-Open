@@ -65,7 +65,7 @@ class RunCreate(BaseModel):
     test_set_id: int
     target_model: str | None = None
     judge_model: str | None = None
-    judge_provider: Literal["openrouter", "anthropic", "mock"] | None = None
+    judge_provider: Literal["openrouter", "anthropic", "gemini", "groq", "mock"] | None = None
     prompt_template: str | None = Field(default=None, min_length=1)
     temperature: float | None = Field(default=None, ge=0.0, le=2.0)
     max_cases: int | None = Field(default=None, ge=1)
@@ -160,6 +160,10 @@ class AppConfigRead(BaseModel):
     judge_models: list[str]
     pass_threshold: float
     max_concurrency: int
+    openrouter_min_interval_seconds: float
+    gemini_min_interval_seconds: float
+    groq_min_interval_seconds: float
+    fallback_to_mock_judge_on_error: bool
     openrouter_configured: bool
     anthropic_configured: bool
     gemini_configured: bool

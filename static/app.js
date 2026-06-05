@@ -20,6 +20,7 @@ const state = {
   currentRunId: null,
   currentRun: null,
   results: [],
+  resultsRunId: null,
   pollTimer: null,
 };
 
@@ -41,6 +42,7 @@ const els = {
   casePanelNote: document.querySelector("#case-panel-note"),
   bulkCasesForm: document.querySelector("#bulk-cases-form"),
   bulkCasesInput: document.querySelector("#bulk-cases-input"),
+  loadSampleCases: document.querySelector("#load-sample-cases"),
   clearBulkCases: document.querySelector("#clear-bulk-cases"),
   reloadCases: document.querySelector("#reload-cases"),
   casePreviewBody: document.querySelector("#case-preview-body"),
@@ -51,8 +53,6 @@ const els = {
   runTemperature: document.querySelector("#run-temperature"),
   runMaxCases: document.querySelector("#run-max-cases"),
   runNotes: document.querySelector("#run-notes"),
-  modelOptions: document.querySelector("#model-options"),
-  judgeOptions: document.querySelector("#judge-options"),
   currentRunId: document.querySelector("#current-run-id"),
   currentRunStatus: document.querySelector("#current-run-status"),
   currentRunProgress: document.querySelector("#current-run-progress"),
@@ -66,6 +66,7 @@ const els = {
   historyView: document.querySelector("#history-view"),
   reloadResults: document.querySelector("#reload-results"),
   reloadHistory: document.querySelector("#reload-history"),
+  resultsRunMeta: document.querySelector("#results-run-meta"),
   resultsBody: document.querySelector("#results-body"),
   historyBody: document.querySelector("#history-body"),
   toastRegion: document.querySelector("#toast-region"),
@@ -84,6 +85,7 @@ function bindEvents() {
   els.refreshTestSets.addEventListener("click", loadTestSets);
   els.createTestSetForm.addEventListener("submit", handleCreateTestSet);
   els.bulkCasesForm.addEventListener("submit", handleBulkCases);
+  els.loadSampleCases.addEventListener("click", loadSampleCases);
   els.clearBulkCases.addEventListener("click", () => {
     els.bulkCasesInput.value = "";
     els.bulkCasesInput.focus();
@@ -97,6 +99,29 @@ function bindEvents() {
   [els.resultsTab, els.historyTab].forEach((tab) => {
     tab.addEventListener("click", () => setActiveView(tab.dataset.view));
   });
+}
+
+function loadSampleCases() {
+  els.bulkCasesInput.value = JSON.stringify(
+    [
+      {
+        input: "Explain retrieval augmented generation in one sentence.",
+        reference: "RAG combines document retrieval with text generation to answer with more relevant context.",
+      },
+      {
+        input: "What is one benefit of FastAPI for an AI eval dashboard?",
+        reference: "FastAPI supports async endpoints and automatic OpenAPI docs.",
+      },
+      {
+        input: "Why keep max_cases small on a free API tier?",
+        reference: "Each case can trigger target and judge calls, so low max_cases reduces rate-limit pressure.",
+      },
+    ],
+    null,
+    2
+  );
+  els.bulkCasesInput.focus();
+  showToast("Sample loaded", "Add these cases, then start a run.", "ok");
 }
 
 async function loadInitialData() {
@@ -270,6 +295,7 @@ async function handleStartRun(event) {
   const runConfig = {
     model: els.runModel.value.trim(),
     judge_model: els.runJudge.value.trim() || null,
+    judge_provider: providerForModel(els.runJudge.value.trim(), "openrouter"),
     temperature: toOptionalNumber(els.runTemperature.value),
     max_cases: toOptionalInteger(els.runMaxCases.value),
     prompt_template: els.runNotes.value.trim() || "Answer clearly:\n\n{input}",
@@ -297,8 +323,17 @@ async function handleStartRun(event) {
     });
     const run = normalizeRun(created);
     state.currentRunId = run.id || getId(created);
-    state.currentRun = run;
+    state.currentRun = {
+      ...run,
+      model: runConfig.model,
+      target_model: runConfig.model,
+      judge_model: runConfig.judge_model,
+      status: run.status || "pending",
+      total: runConfig.max_cases || state.cases.length,
+      completed: 0,
+    };
     state.results = [];
+    state.resultsRunId = null;
     renderCurrentRun();
     renderResults();
     await loadRunsForSelected(false);
@@ -359,6 +394,7 @@ async function loadResultsForCurrentRun(showNotice) {
   try {
     const data = await request(API.runResults(state.currentRunId));
     state.results = toArray(data, ["results", "items", "data"]).map(normalizeResult);
+    state.resultsRunId = state.currentRunId;
     renderResults();
     if (showNotice) {
       showToast("Results reloaded", `${state.results.length} rows`, "ok");
@@ -399,11 +435,12 @@ async function pollRun(runId) {
 
     if (resultsData.status === "fulfilled") {
       state.results = toArray(resultsData.value, ["results", "items", "data"]).map(normalizeResult);
+      state.resultsRunId = state.currentRunId || runId;
       renderResults();
     }
 
     const status = String(state.currentRun?.status || "").toLowerCase();
-    if (["completed", "complete", "finished", "failed", "error", "cancelled", "canceled"].includes(status)) {
+    if (["done", "completed", "complete", "finished", "failed", "error", "cancelled", "canceled"].includes(status)) {
       stopPolling(false);
       await loadRunsForSelected(false);
     }
@@ -417,16 +454,28 @@ function renderConfig() {
   const config = state.config || {};
   const models = optionList(config, ["models", "available_models", "model_names"]);
   const judges = optionList(config, ["judge_models", "judges", "evaluator_models"]);
-  fillDatalist(els.modelOptions, models);
-  fillDatalist(els.judgeOptions, judges);
+  const keptModel = fillSelect(els.runModel, models);
+  const keptJudge = fillSelect(els.runJudge, judges);
 
-  const defaultModel = firstString(config.default_model, config.model, models[0]);
-  const defaultJudge = firstString(config.default_judge_model, config.judge_model, judges[0]);
-  if (!els.runModel.value && defaultModel) {
-    els.runModel.value = defaultModel;
+  const preferredModel = firstString(
+    config.gemini_configured ? models.find((model) => model.startsWith("gemini/")) : "",
+    config.groq_configured ? models.find((model) => model.startsWith("groq/")) : "",
+    config.default_model,
+    config.model,
+    models[0]
+  );
+  const preferredJudge = firstString(
+    config.groq_configured ? judges.find((judge) => judge.startsWith("groq/")) : "",
+    config.gemini_configured ? judges.find((judge) => judge.startsWith("gemini/")) : "",
+    config.default_judge_model,
+    config.judge_model,
+    judges[0]
+  );
+  if (!keptModel && preferredModel) {
+    els.runModel.value = preferredModel;
   }
-  if (!els.runJudge.value && defaultJudge) {
-    els.runJudge.value = defaultJudge;
+  if (!keptJudge && preferredJudge) {
+    els.runJudge.value = preferredJudge;
   }
 
   const modelCount = models.length ? `${models.length} models` : "Manual model";
@@ -516,7 +565,7 @@ function renderCurrentRun() {
   const completed = run.completed ?? run.completedCases ?? state.results.length ?? 0;
   const progress = total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0;
 
-  els.currentRunId.textContent = `Run ${shortId(run.id || state.currentRunId)}`;
+  els.currentRunId.textContent = `Run ${shortId(run.id || state.currentRunId)} · ${modelForRun(run)}`;
   els.currentRunStatus.textContent = run.status || "Unknown";
   els.currentRunProgress.textContent = `${completed} / ${total}`;
   els.currentRunScore.textContent = formatScore(run.score ?? run.averageScore ?? run.avg_score);
@@ -526,6 +575,7 @@ function renderCurrentRun() {
 
 function renderResults() {
   els.resultsBody.innerHTML = "";
+  renderResultsMeta();
 
   if (state.results.length === 0) {
     appendEmptyRow(els.resultsBody, 6, "No results loaded");
@@ -554,15 +604,17 @@ function renderHistory() {
   els.historyBody.innerHTML = "";
 
   if (state.runs.length === 0) {
-    appendEmptyRow(els.historyBody, 6, "No runs loaded");
+    appendEmptyRow(els.historyBody, 7, "No runs loaded");
     return;
   }
 
   state.runs.forEach((run) => {
     const row = document.createElement("tr");
+    row.className = String(run.id) === String(state.currentRunId) ? "history-row active" : "history-row";
     appendCell(row, shortId(run.id));
     appendCell(row, run.status || "Unknown");
-    appendCell(row, run.model || run.config?.model || "-");
+    appendCell(row, modelForRun(run));
+    appendCell(row, judgeForRun(run));
     appendCell(row, formatScore(run.score ?? run.averageScore ?? run.avg_score));
     appendCell(row, formatDate(run.startedAt || run.createdAt));
 
@@ -570,13 +622,18 @@ function renderHistory() {
     const openButton = document.createElement("button");
     openButton.type = "button";
     openButton.className = "button secondary compact";
-    openButton.textContent = "Open";
+    openButton.textContent = String(run.id) === String(state.currentRunId) ? "Viewing" : "View";
     openButton.addEventListener("click", async () => {
+      stopPolling(false);
       state.currentRunId = run.id;
       state.currentRun = run;
+      state.results = [];
+      state.resultsRunId = null;
       renderCurrentRun();
-      await loadResultsForCurrentRun(false);
+      renderResults();
+      renderHistory();
       setActiveView("results");
+      await loadResultsForCurrentRun(false);
     });
     actionCell.appendChild(openButton);
     row.appendChild(actionCell);
@@ -592,6 +649,7 @@ function clearSelection() {
   state.currentRunId = null;
   state.currentRun = null;
   state.results = [];
+  state.resultsRunId = null;
   stopPolling(false);
   setSelectedEnabled(false);
   els.selectedTitle.textContent = "No set selected";
@@ -610,6 +668,7 @@ function setSelectedEnabled(enabled) {
   [
     els.bulkCasesInput,
     els.bulkCasesForm.querySelector("button[type='submit']"),
+    els.loadSampleCases,
     els.clearBulkCases,
     els.reloadCases,
     els.runModel,
@@ -748,7 +807,7 @@ function normalizeRun(value) {
     ...item,
     id: getId(item),
     status: firstString(item.status, item.state, item.phase, "Unknown"),
-    model: firstString(item.model, item.model_name, config.model),
+    model: firstString(item.model, item.target_model, item.model_name, config.model),
     score: toOptionalNumber(item.score ?? item.average_score ?? item.avg_score ?? item.mean_score),
     total: toOptionalInteger(item.total ?? item.total_cases ?? item.case_count),
     completed: toOptionalInteger(item.completed ?? item.completed_cases ?? item.finished_cases),
@@ -786,6 +845,47 @@ function sortRuns(runs) {
   });
 }
 
+function renderResultsMeta() {
+  if (!state.currentRunId || !state.currentRun) {
+    els.resultsRunMeta.textContent = "No run selected";
+    return;
+  }
+
+  const loading = state.resultsRunId === null && state.results.length === 0 ? "loading results" : "showing results";
+  els.resultsRunMeta.textContent = [
+    `Run ${shortId(state.currentRunId)}`,
+    `Target: ${modelForRun(state.currentRun)}`,
+    `Judge: ${judgeForRun(state.currentRun)}`,
+    loading,
+  ].join(" / ");
+}
+
+function modelForRun(run) {
+  return firstString(run?.target_model, run?.model, run?.model_name, run?.config?.model, "-");
+}
+
+function judgeForRun(run) {
+  const provider = firstString(run?.judge_provider, run?.config?.judge_provider);
+  const model = firstString(run?.judge_model, run?.config?.judge_model);
+  if (provider && model) {
+    return `${provider}:${model}`;
+  }
+  return model || provider || "-";
+}
+
+function providerForModel(model, fallback) {
+  if (model.startsWith("mock/")) {
+    return "mock";
+  }
+  if (model.startsWith("gemini/")) {
+    return "gemini";
+  }
+  if (model.startsWith("groq/")) {
+    return "groq";
+  }
+  return fallback;
+}
+
 function toArray(value, keys = []) {
   if (Array.isArray(value)) {
     return value;
@@ -817,13 +917,28 @@ function optionList(config, keys) {
   return [];
 }
 
-function fillDatalist(datalist, values) {
-  datalist.innerHTML = "";
+function fillSelect(select, values) {
+  const previous = select.value;
+  select.innerHTML = "";
   values.forEach((value) => {
     const option = document.createElement("option");
     option.value = value;
-    datalist.appendChild(option);
+    option.textContent = value;
+    select.appendChild(option);
   });
+
+  if (previous && values.includes(previous)) {
+    select.value = previous;
+    return true;
+  }
+
+  if (values.length === 0) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "No options";
+    select.appendChild(option);
+  }
+  return false;
 }
 
 function getId(value) {
@@ -961,7 +1076,7 @@ function setApiStatus(kind, text) {
 }
 
 function setFormBusy(form, busy) {
-  form.querySelectorAll("button, input, textarea").forEach((element) => {
+  form.querySelectorAll("button, input, select, textarea").forEach((element) => {
     element.disabled = busy;
   });
 }
