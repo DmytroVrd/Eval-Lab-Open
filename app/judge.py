@@ -31,6 +31,25 @@ def _token_set(value: str) -> set[str]:
     return set(re.findall(r"[\w']+", value.lower()))
 
 
+def _has_detail_blocking_instruction(prompt: str) -> bool:
+    prompt = re.sub(
+        r"\b(do not|don't|without)\s+(add|invent|create|include)\s+new\s+details\b",
+        " ",
+        prompt,
+    )
+    prompt = re.sub(r"\bno\s+new\s+details\b", " ", prompt)
+    negation = r"(avoid|hide|skip|omit|remove|ignore|exclude|without|no|do not|don't)"
+    detail = (
+        r"(details?|specifics?|technical|explanations?|explain|reasoning|steps?|"
+        r"evidence|sources?|citations?|facts?)"
+    )
+    if re.search(rf"\b{negation}\b(?:\W+\w+){{0,4}}\W+\b{detail}\b", prompt):
+        return True
+    if re.search(r"\b(keep|make)\b(?:\W+\w+){0,3}\W+\b(vague|generic|broad)\b", prompt):
+        return True
+    return False
+
+
 def _prompt_quality_score(prompt_template: str | None, reference: str | None) -> tuple[float, str]:
     if not prompt_template:
         return 0.4, "prompt template was not provided"
@@ -101,10 +120,10 @@ def _prompt_quality_score(prompt_template: str | None, reference: str | None) ->
 
     if re.search(r"\b(dumb|stupid|idiot|moron|shut up|insult|demean|mock|not smart)\b", prompt):
         return 0.1, "prompt is hostile or insulting"
+    if _has_detail_blocking_instruction(prompt):
+        return 0.35, "prompt blocks details that the task may need"
     if reference and (
-        "avoid technical details" in prompt
-        or "avoid details" in prompt
-        or re.search(r"\b(do not|don't)\s+mention\b", prompt)
+        re.search(r"\b(do not|don't)\s+mention\b", prompt)
     ):
         return 0.3, "prompt hides details that may be required by the task"
     if len(meaningful_tokens) <= 1:
@@ -198,7 +217,10 @@ def _judge_prompt(
         "Also judge whether the prompt template is fit for the task. If the prompt is "
         "hostile, insulting, unrelated, or tells the model to hide/avoid details that "
         "the task requires, the run should receive a low score even if the model tries "
-        "to recover with a polite generic answer.\n\n"
+        "to recover with a polite generic answer. Grade prompt_quality independently "
+        "from the final answer: a strong prompt gives a clear task, useful constraints, "
+        "and success criteria; a weak prompt is vague, generic, conflicting, or blocks "
+        "facts/details/sources needed by the input task.\n\n"
         "Return only a valid JSON object like "
         '{"score": 0.8, "passed": true, "correctness": 0.8, '
         '"relevance": 0.9, "completeness": 0.7, "prompt_quality": 0.6, '
@@ -222,6 +244,10 @@ def _system_rubric(pass_threshold: float) -> str:
         "detail-hiding prompts should be penalized as prompt failures. If a model "
         "refuses an insulting prompt and gives a polite generic answer, do not score "
         "it highly unless it still clearly fulfills the actual task and reference. "
+        "Use this prompt_quality scale: 0.9-1.0 clear task plus useful constraints; "
+        "0.7-0.8 clear but underspecified; 0.4-0.6 vague, generic, or missing success "
+        "criteria; 0.0-0.3 hostile, unrelated, contradictory, or asks to hide facts, "
+        "sources, steps, or explanations needed for the task. "
         "Return only valid JSON with score, passed, correctness, relevance, "
         "completeness, prompt_quality, and reason. prompt_quality evaluates the "
         "prompt template itself: task clarity, constraints, specificity, and whether "

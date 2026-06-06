@@ -108,7 +108,7 @@ AI Eval Lab is a compact FastAPI + vanilla JS evaluation dashboard:
 - inspect correctness, relevance, completeness, and prompt-quality sub-scores;
 - compare two runs side-by-side to see score regressions and improvements;
 - review a score-over-time chart for each test set;
-- open with a seeded AI incident-response test set for real bad-prompt versus good-prompt runs;
+- open with a seeded AI concepts test set for real bad-prompt versus good-prompt runs;
 - store run history and inspect result tables;
 - run locally for free with mocks, or use OpenRouter/Gemini/Groq/Anthropic keys.
 
@@ -180,10 +180,46 @@ The result reason will say that fallback was used, so real LLM-judge failures ar
 
 ### Screenshots
 
-Replace or refresh these after UI changes:
+<table>
+  <tr>
+    <td width="65%">
+      <img src="docs/screenshots/01-dashboard.png" alt="AI Eval Lab dashboard">
+    </td>
+    <td width="35%">
+      <img src="docs/screenshots/05-history.png" alt="Run history and score-over-time chart">
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Dashboard and run configuration</strong></td>
+    <td align="center"><strong>Run history and score trend</strong></td>
+  </tr>
+</table>
 
-![01 dashboard](docs/screenshots/01-dashboard.png)
-![02 test-set-flow](docs/screenshots/02-test-set-flow.png)
-![03-run-config](docs/screenshots/03-run-config.png)
-![04-results](docs/screenshots/04-results.png)
-![05-history](docs/screenshots/05-history.png)
+#### Prompt Regression Comparison
+
+Bad and improved prompts are compared case-by-case, including score and sub-score deltas.
+
+<p align="center">
+  <img src="docs/screenshots/02-compare-preview.png" alt="Prompt regression comparison" width="860">
+</p>
+
+<details>
+  <summary><strong>View the full comparison</strong></summary>
+  <p align="center">
+    <img src="docs/screenshots/02-compare.png" alt="Full prompt regression comparison" width="860">
+  </p>
+</details>
+
+<details>
+  <summary><strong>View strong-prompt results</strong></summary>
+  <p align="center">
+    <img src="docs/screenshots/03-good-results.png" alt="Strong prompt evaluation results" width="860">
+  </p>
+</details>
+
+<details>
+  <summary><strong>View weak-prompt results</strong></summary>
+  <p align="center">
+    <img src="docs/screenshots/04-bad-results.png" alt="Weak prompt evaluation results" width="860">
+  </p>
+</details>

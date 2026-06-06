@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Eval Lab</title>
-    <link rel="stylesheet" href="/static/style.css?v=20260605-cleanup1" />
+    <link rel="stylesheet" href="/static/style.css?v=20260606-inputs2" />
   </head>
   <body>
     <div class="app-shell">
@@ -100,8 +100,12 @@
 
               <form id="bulk-cases-form" class="stacked-form">
                 <label>
-                  <span>Bulk input</span>
-                  <textarea id="bulk-cases-input" rows="8" spellcheck="false" placeholder='[{"input":"question","expected":"answer"}]'></textarea>
+                  <span>Inputs</span>
+                  <textarea id="bulk-cases-input" rows="8" spellcheck="false" placeholder="Example inputs:
+
+What is retrieval-augmented generation (RAG)?
+Why can large language models hallucinate?"></textarea>
+                  <small class="field-hint">Add one input, or paste several inputs on separate lines.</small>
                 </label>
                 <div class="form-row">
                   <button id="load-sample-cases" class="button secondary" type="button">Load Sample</button>
@@ -115,12 +119,11 @@
                   <thead>
                     <tr>
                       <th>Input</th>
-                      <th>Expected</th>
                     </tr>
                   </thead>
                   <tbody id="case-preview-body">
                     <tr>
-                      <td colspan="2" class="empty-cell">No cases loaded</td>
+                      <td colspan="1" class="empty-cell">No cases loaded</td>
                     </tr>
                   </tbody>
                 </table>
@@ -310,6 +313,6 @@
     </div>
 
     <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
-    <script src="/static/app.js?v=20260605-cleanup1" defer></script>
+    <script src="/static/app.js?v=20260606-inputs2" defer></script>
   </body>
 </html>

@@ -431,6 +431,13 @@ textarea {
   resize: vertical;
 }
 
+input::placeholder,
+textarea::placeholder {
+  color: #8a9691;
+  font-weight: 500;
+  opacity: 1;
+}
+
 input:focus,
 select:focus,
 textarea:focus {

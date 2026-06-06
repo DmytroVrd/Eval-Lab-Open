@@ -122,24 +122,10 @@ function bindEvents() {
 }
 
 function loadSampleCases() {
-  els.bulkCasesInput.value = JSON.stringify(
-    [
-      {
-        input: "Explain retrieval augmented generation in one sentence.",
-        reference: "RAG combines document retrieval with text generation to answer with more relevant context.",
-      },
-      {
-        input: "What is one benefit of FastAPI for an AI eval dashboard?",
-        reference: "FastAPI supports async endpoints and automatic OpenAPI docs.",
-      },
-      {
-        input: "Why keep max_cases small on a free API tier?",
-        reference: "Each case can trigger target and judge calls, so low max_cases reduces rate-limit pressure.",
-      },
-    ],
-    null,
-    2
-  );
+  els.bulkCasesInput.value = [
+    "What is retrieval-augmented generation (RAG)?",
+    "Why can large language models hallucinate?",
+  ].join("\n");
   els.bulkCasesInput.focus();
   showToast("Sample loaded", "Add these cases, then start a run.", "ok");
 }
@@ -635,14 +621,13 @@ function renderCases() {
   els.casePreviewBody.innerHTML = "";
 
   if (state.cases.length === 0) {
-    appendEmptyRow(els.casePreviewBody, 2, "No cases loaded");
+    appendEmptyRow(els.casePreviewBody, 1, "No cases loaded");
     return;
   }
 
   state.cases.slice(0, 8).forEach((testCase) => {
     const row = document.createElement("tr");
     appendCell(row, compactValue(testCase.input || testCase.prompt || testCase.name || testCase.raw));
-    appendCell(row, compactValue(testCase.expected || testCase.expected_output || testCase.answer || "-"));
     els.casePreviewBody.appendChild(row);
   });
 }

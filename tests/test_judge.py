@@ -101,6 +101,34 @@ async def test_prompt_quality_cap_penalizes_vague_prompt_even_when_output_is_fri
     assert result.prompt_quality <= 0.25
 
 
+@pytest.mark.parametrize(
+    "prompt_template",
+    [
+        "Say something short and positive. Do not explain details.\n\n{input}",
+        "Keep the answer generic and skip specific facts.\n\n{input}",
+    ],
+)
+@pytest.mark.asyncio
+async def test_prompt_quality_cap_penalizes_detail_blocking_prompt(prompt_template: str) -> None:
+    result = await evaluate_answer(
+        input_text="Explain what is RAG?",
+        output=(
+            "RAG stands for retrieval augmented generation. It retrieves relevant "
+            "documents and uses them as context for the answer."
+        ),
+        reference=None,
+        prompt_template=prompt_template,
+        judge_model="mock/judge",
+        judge_provider="mock",
+        pass_threshold=0.7,
+    )
+
+    assert result.passed is False
+    assert result.score <= 0.45
+    assert result.prompt_quality is not None
+    assert result.prompt_quality <= 0.35
+
+
 def test_prompt_quality_cap_trusts_clear_local_rubric_over_low_provider_prompt_score() -> None:
     result = _apply_prompt_quality_cap(
         JudgeResult(
