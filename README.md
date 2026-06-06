@@ -1,184 +1,30 @@
 # AI Eval Lab
 
-AI Eval Lab is a small web app for regression-testing prompts and LLM models. Create a test set, run a target model through OpenRouter, Gemini, Groq, or local mock mode, judge each answer through OpenRouter, Gemini, Groq, Anthropic, or mock mode, and review scores in a dashboard.
+![CI](https://github.com/DmytroVrd/Eval-Lab-Open/actions/workflows/ci.yml/badge.svg)
 
-## Українською
+AI Eval Lab is a web dashboard for regression-testing prompts and LLM models.
 
-### Можливості v1
+Create reusable test sets, run the same inputs through different prompts or models, evaluate
+answers with an LLM judge, and compare score changes case by case.
 
-- тест-сети й кейси через FastAPI API та веб-дашборд;
-- асинхронний прогін тестів у фоні;
-- target-модель через OpenRouter, Gemini, Groq або `mock/target`;
-- judge через OpenRouter, Anthropic tool-use JSON schema або `mock/judge`;
-- оцінка `score`, `pass/fail`, причина, latency та помилки по кожному кейсу;
-- історія прогонів для кожного тест-сету;
-- SQLite за замовчуванням, PostgreSQL через `DATABASE_URL`;
-- Alembic, Docker, GitHub Actions CI.
+## Why This Project
 
-### Швидкий старт
+Modern LLMs can often recover from weak prompts, which makes prompt quality difficult to judge
+from a single output. AI Eval Lab evaluates both the generated answer and the instruction that
+produced it.
 
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-pip install -e ".[dev]"
+The project demonstrates:
 
-Copy-Item .env.example .env
-uvicorn app.main:app --reload
-```
+- prompt regression testing across reusable input sets;
+- structured LLM-as-judge evaluation;
+- correctness, relevance, completeness, and prompt-quality sub-scores;
+- side-by-side run comparison with score deltas;
+- score-over-time tracking;
+- multi-provider target and judge integrations;
+- retry, rate-limit, and fallback handling for free API tiers;
+- persistent run history with SQLite or PostgreSQL.
 
-Відкрий:
-
-- Dashboard: `http://localhost:8000`
-- API docs: `http://localhost:8000/docs`
-- Health: `http://localhost:8000/health`
-
-### Безкоштовний локальний режим
-
-За замовчуванням `.env.example` тримає `LOCAL_MOCK_WITHOUT_KEYS=true`. Якщо ключі порожні, app не викликає платні API, а використовує deterministic mock-відповіді. Це зручно для демо, CV-скрінів, тестів і CI.
-
-Для безкоштовних OpenRouter-моделей додай ключ OpenRouter і лиши judge provider як `openrouter`:
-
-```env
-OPENROUTER_API_KEY=sk-or-...
-DEFAULT_TARGET_MODEL=openrouter/free
-DEFAULT_JUDGE_PROVIDER=openrouter
-DEFAULT_JUDGE_MODEL=openrouter/free
-LOCAL_MOCK_WITHOUT_KEYS=false
-```
-
-Gemini і Groq теж можна використовувати як target-модель через префікси моделей; заміни `<model>` на ID моделі провайдера:
-
-```env
-GEMINI_API_KEY=...
-GROQ_API_KEY=gsk_...
-DEFAULT_TARGET_MODEL=gemini/<model>
-DEFAULT_JUDGE_PROVIDER=openrouter
-DEFAULT_JUDGE_MODEL=openrouter/free
-LOCAL_MOCK_WITHOUT_KEYS=false
-```
-
-Для реальних provider API free-режим не гарантує нульових витрат: free tiers можуть мати rate limits, змінювати доступні моделі або вимагати billing. `LOCAL_MOCK_WITHOUT_KEYS=true` захищає від зовнішніх викликів тільки коли відповідні ключі порожні.
-
-Anthropic judge теж підтриманий, але це зазвичай не повністю free:
-
-```env
-ANTHROPIC_API_KEY=sk-ant-...
-DEFAULT_JUDGE_PROVIDER=anthropic
-DEFAULT_JUDGE_MODEL=claude-haiku-4-5-20251001
-```
-
-### Docker
-
-```powershell
-docker compose up --build
-```
-
-PostgreSQL profile:
-
-```powershell
-docker compose --profile postgres up --build
-```
-
-Для API контейнера з PostgreSQL:
-
-```env
-DATABASE_URL=postgresql+asyncpg://eval_lab:eval_lab@db:5432/eval_lab
-```
-
-### Тести
-
-```powershell
-$env:LOCAL_MOCK_WITHOUT_KEYS="true"
-$env:DEFAULT_TARGET_MODEL="mock/target"
-$env:DEFAULT_JUDGE_PROVIDER="mock"
-$env:DEFAULT_JUDGE_MODEL="mock/judge"
-pytest -q
-```
-
-## English
-
-### What It Does
-
-AI Eval Lab is a compact FastAPI + vanilla JS evaluation dashboard:
-
-- create test sets and bulk-import cases;
-- run a target LLM against all cases;
-- judge each prompt/run with structured LLM-as-judge results;
-- inspect correctness, relevance, completeness, and prompt-quality sub-scores;
-- compare two runs side-by-side to see score regressions and improvements;
-- review a score-over-time chart for each test set;
-- open with a seeded AI concepts test set for real bad-prompt versus good-prompt runs;
-- store run history and inspect result tables;
-- run locally for free with mocks, or use OpenRouter/Gemini/Groq/Anthropic keys.
-
-### Local Setup
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-pip install -e ".[dev]"
-
-cp .env.example .env
-uvicorn app.main:app --reload
-```
-
-Open `http://localhost:8000` for the dashboard or `http://localhost:8000/docs` for OpenAPI docs.
-
-### Provider Models
-
-Set provider API keys in `.env` and use a provider prefix in model names:
-
-```env
-OPENROUTER_API_KEY=sk-or-...
-GEMINI_API_KEY=...
-GROQ_API_KEY=gsk_...
-DEFAULT_TARGET_MODEL=gemini/<model>
-DEFAULT_JUDGE_PROVIDER=groq
-DEFAULT_JUDGE_MODEL=groq/<model>
-```
-
-Replace `<model>` with a model ID from the provider. Use `gemini/<model>` for Gemini models and `groq/<model>` for Groq models. Groq is a good judge choice when OpenRouter free judge calls are exhausted or temporarily rate-limited.
-
-Free provider tiers can still have rate limits, model availability changes, or billing requirements. `LOCAL_MOCK_WITHOUT_KEYS=true` only prevents external provider calls when the matching API keys are empty.
-
-### Rate-Limit Safety
-
-Each evaluated case can use more than one external request. For example, Gemini target + OpenRouter judge means one Gemini call and one OpenRouter call per case. Keep `MAX_CONCURRENCY=2` and use `max_cases=3` while testing free tiers.
-
-The app also spaces real provider requests before sending them:
-
-```env
-OPENROUTER_MIN_INTERVAL_SECONDS=3.2
-GEMINI_MIN_INTERVAL_SECONDS=15.5
-GROQ_MIN_INTERVAL_SECONDS=1.0
-```
-
-The Gemini default is intentionally below the free `gemini-2.5-flash` limit you showed: roughly 4 RPM instead of the hard 5 RPM cap, with retries also passing through the same limiter. If a provider still returns `429` or `5xx`, the app retries up to 3 attempts with `Retry-After` support or exponential backoff.
-
-When a target model returns an answer but the external judge is rate-limited, the app can fall back to `mock/judge` instead of scoring the case as automatic zero:
-
-```env
-FALLBACK_TO_MOCK_JUDGE_ON_ERROR=true
-```
-
-The result reason will say that fallback was used, so real LLM-judge failures are still visible.
-
-### API Surface
-
-- `POST /test-sets`
-- `GET /test-sets`
-- `GET /test-sets/{id}`
-- `GET /test-sets/{id}/cases`
-- `POST /test-sets/{id}/cases`
-- `POST /test-sets/{id}/cases/bulk`
-- `POST /runs`
-- `GET /runs/{id}`
-- `GET /runs/{id}/results`
-- `GET /test-sets/{id}/runs`
-
-### Screenshots
+## Screenshots
 
 <table>
   <tr>
@@ -195,9 +41,10 @@ The result reason will say that fallback was used, so real LLM-judge failures ar
   </tr>
 </table>
 
-#### Prompt Regression Comparison
+### Prompt Regression Comparison
 
-Bad and improved prompts are compared case-by-case, including score and sub-score deltas.
+The same test cases were evaluated with a weak prompt and an improved prompt. The comparison
+shows output changes, overall score deltas, and sub-score deltas.
 
 <p align="center">
   <img src="docs/screenshots/02-compare-preview.png" alt="Prompt regression comparison" width="860">
@@ -223,3 +70,236 @@ Bad and improved prompts are compared case-by-case, including score and sub-scor
     <img src="docs/screenshots/04-bad-results.png" alt="Weak prompt evaluation results" width="860">
   </p>
 </details>
+
+## Features
+
+- Create, clear, and delete test sets.
+- Add one input or bulk-add multiple inputs line by line.
+- Run OpenRouter, Gemini, Groq, or deterministic local mock targets.
+- Use OpenRouter, Gemini, Groq, Anthropic, or mock judges.
+- Configure prompt template, temperature, and maximum case count per run.
+- Inspect generated output, pass/fail status, judge reason, and latency.
+- Review correctness, relevance, completeness, and prompt-quality scores.
+- Compare two runs and highlight improvements or regressions.
+- Track average score across run history.
+- Retry `429` and `5xx` provider failures with backoff and `Retry-After` support.
+- Fall back to a local mock judge when an external judge is unavailable.
+- Start with a seeded AI concepts demo set.
+- Run without paid APIs through deterministic local mock mode.
+
+## Demo Workflow
+
+The seeded `AI Concepts Prompt Demo` contains questions about RAG, hallucinations, embeddings,
+and tokens.
+
+Run the same cases with a weak prompt:
+
+```text
+Say something impressive and positive. Keep the answer vague and generic.
+Do not explain technical details.
+
+{input}
+```
+
+Then run them with a stronger prompt:
+
+```text
+You are a patient AI tutor. Answer the user's question accurately for a beginner
+in 3-4 concise sentences. Define the key terms, explain why the concept matters,
+and include one simple example or analogy. Avoid unsupported claims and
+unnecessary jargon.
+
+{input}
+```
+
+Open **History**, select the two runs, and use **Compare** to inspect the regression delta.
+
+## Architecture
+
+```text
+Browser dashboard
+      |
+      v
+FastAPI routes
+      |
+      +--> Test sets and cases
+      |
+      +--> Background evaluation runner
+              |
+              +--> Target model
+              |      OpenRouter / Gemini / Groq / mock
+              |
+              +--> Structured LLM judge
+                     OpenRouter / Gemini / Groq / Anthropic / mock
+      |
+      v
+SQLAlchemy
+      |
+      +--> SQLite
+      +--> PostgreSQL
+```
+
+## Tech Stack
+
+- Python 3.11
+- FastAPI
+- SQLAlchemy 2
+- Pydantic
+- httpx
+- SQLite and PostgreSQL
+- Alembic
+- Vanilla JavaScript and CSS
+- Docker Compose
+- pytest
+- GitHub Actions
+
+## Quick Start
+
+Create a virtual environment and install the project:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -e ".[dev]"
+cp .env.example .env
+```
+
+Windows PowerShell equivalents:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -e ".[dev]"
+Copy-Item .env.example .env
+```
+
+Start the app:
+
+```bash
+uvicorn app.main:app --reload
+```
+
+Open:
+
+- Dashboard: `http://localhost:8000`
+- API docs: `http://localhost:8000/docs`
+- Health check: `http://localhost:8000/health`
+
+## Local Mock Mode
+
+The default configuration works without provider keys:
+
+```env
+LOCAL_MOCK_WITHOUT_KEYS=true
+```
+
+When a matching API key is empty, the app uses deterministic local mock responses. This mode
+is useful for development, tests, CI, and UI demos without consuming external quotas.
+
+## Provider Configuration
+
+Copy `.env.example` to `.env` and add only the keys you want to use:
+
+```env
+OPENROUTER_API_KEY=
+GEMINI_API_KEY=
+GROQ_API_KEY=
+ANTHROPIC_API_KEY=
+
+DEFAULT_TARGET_MODEL=openrouter/free
+DEFAULT_JUDGE_PROVIDER=groq
+DEFAULT_JUDGE_MODEL=groq/llama-3.3-70b-versatile
+LOCAL_MOCK_WITHOUT_KEYS=false
+```
+
+Target model prefixes:
+
+- `openrouter/<model>`
+- `gemini/<model>`
+- `groq/<model>`
+- `mock/target`
+
+Judge model prefixes:
+
+- `openrouter/<model>`
+- `gemini/<model>`
+- `groq/<model>`
+- Anthropic model ID with `judge_provider=anthropic`
+- `mock/judge`
+
+Free provider tiers can change limits or model availability. Keep test runs small until the
+provider configuration is confirmed.
+
+## Rate-Limit Safety
+
+Each case can trigger both a target request and a judge request. The default runtime settings
+reduce pressure on free tiers:
+
+```env
+MAX_CONCURRENCY=2
+OPENROUTER_MIN_INTERVAL_SECONDS=3.2
+GEMINI_MIN_INTERVAL_SECONDS=15.5
+GROQ_MIN_INTERVAL_SECONDS=1.0
+FALLBACK_TO_MOCK_JUDGE_ON_ERROR=true
+```
+
+Provider calls retry up to three times on `429` and `5xx` responses. The retry layer respects
+`Retry-After` when available and otherwise uses exponential backoff.
+
+## Temperature
+
+Temperature is passed to the target model:
+
+- `0` produces more stable and repeatable answers;
+- higher values increase variation and the risk of unnecessary or unsupported details.
+
+The judge uses temperature `0` so evaluation remains as consistent as possible. The local mock
+target is deterministic and does not demonstrate temperature differences.
+
+## Docker
+
+Run the API with SQLite:
+
+```bash
+docker compose up --build
+```
+
+Start the optional PostgreSQL service:
+
+```bash
+docker compose --profile postgres up --build
+```
+
+Use this database URL for the API container:
+
+```env
+DATABASE_URL=postgresql+asyncpg://eval_lab:eval_lab@db:5432/eval_lab
+```
+
+## API
+
+- `GET /api/config`
+- `POST /test-sets`
+- `GET /test-sets`
+- `GET /test-sets/{id}`
+- `DELETE /test-sets/{id}`
+- `POST /test-sets/{id}/cases`
+- `POST /test-sets/{id}/cases/bulk`
+- `GET /test-sets/{id}/cases`
+- `DELETE /test-sets/{id}/cases`
+- `GET /test-sets/{id}/runs`
+- `POST /runs`
+- `GET /runs/{id}`
+- `GET /runs/{id}/results`
+- `GET /runs/compare?a={run_a}&b={run_b}`
+
+## Tests
+
+```bash
+pytest -q
+```
+
+The test suite covers API flows, evaluation runs, prompt-quality rules, provider payloads,
+retry behavior, rate-limit hooks, and run comparison.
