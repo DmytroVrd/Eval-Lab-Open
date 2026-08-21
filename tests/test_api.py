@@ -33,6 +33,15 @@ def test_health_and_config(client: TestClient) -> None:
     assert payload["local_mock_without_keys"] is True
 
 
+def test_observatory_page_is_served_as_separate_route(client: TestClient) -> None:
+    response = client.get("/observatory")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "Quality Observatory" in response.text
+    assert "/static/observatory.js" in response.text
+
+
 def test_test_set_crud_and_bulk_cases(client: TestClient) -> None:
     created = client.post("/test-sets", json={"name": "CV assistant evals"})
     assert created.status_code == 201

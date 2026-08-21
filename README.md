@@ -184,6 +184,7 @@ uvicorn app.main:app --reload
 Open:
 
 - Dashboard: `http://localhost:8000`
+- Quality Observatory: `http://localhost:8000/observatory`
 - API docs: `http://localhost:8000/docs`
 - Health check: `http://localhost:8000/health`
 

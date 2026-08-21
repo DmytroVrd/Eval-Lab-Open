@@ -191,6 +191,8 @@ class RunCompareRow(BaseModel):
     passed_b: bool | None
     reason_a: str | None
     reason_b: str | None
+    error_a: str | None
+    error_b: str | None
 
 
 class RunCompareRead(BaseModel):

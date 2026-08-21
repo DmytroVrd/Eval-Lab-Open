@@ -50,6 +50,10 @@ def create_app() -> FastAPI:
     async def index() -> FileResponse:
         return FileResponse(STATIC_DIR / "index.html")
 
+    @app.get("/observatory", include_in_schema=False)
+    async def observatory() -> FileResponse:
+        return FileResponse(STATIC_DIR / "observatory.html")
+
     return app
 
 

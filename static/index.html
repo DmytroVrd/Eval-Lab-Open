@@ -4,45 +4,34 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Eval Lab</title>
-    <link rel="stylesheet" href="/static/style.css?v=20260606-inputs2" />
+    <link rel="stylesheet" href="/static/style.css?v=20260821e" />
   </head>
   <body>
     <div class="app-shell">
-      <header class="topbar">
-        <div class="brand-block">
-          <span class="brand-mark" aria-hidden="true">EL</span>
-          <div>
-            <h1>Eval Lab</h1>
-            <p id="config-summary">Loading config</p>
-          </div>
-        </div>
-        <div class="topbar-actions">
-          <span id="api-status" class="status-pill neutral">Connecting</span>
-          <button id="refresh-all" class="button secondary" type="button">Refresh</button>
-        </div>
-      </header>
+      <span id="api-status" class="status-pill neutral sr-only">Connecting</span>
+      <span id="config-summary" class="sr-only">Loading config</span>
 
       <main class="layout">
-        <aside class="sidebar" aria-label="Test sets">
+        <aside class="sidebar" aria-label="Evaluation suites">
           <section class="panel sidebar-panel">
             <div class="panel-heading">
               <div>
-                <h2>Test Sets</h2>
-                <p id="test-set-count">0 sets</p>
+                <p class="eyebrow">Library</p>
+                <h2>Evaluation Suites</h2>
+                <p id="test-set-count">0 suites</p>
               </div>
-              <button id="refresh-test-sets" class="icon-button" type="button" aria-label="Refresh test sets" title="Refresh test sets">R</button>
             </div>
 
             <form id="create-test-set-form" class="stacked-form">
               <label>
-                <span>Name</span>
+                <span>Suite name</span>
                 <input id="new-test-set-name" name="name" type="text" autocomplete="off" required maxlength="120" />
               </label>
               <label>
                 <span>Description</span>
                 <textarea id="new-test-set-description" name="description" rows="3" maxlength="500"></textarea>
               </label>
-              <button class="button primary full" type="submit">Create Set</button>
+              <button class="button primary full" type="submit">Create suite</button>
             </form>
 
             <div id="test-set-list" class="test-set-list" role="list" aria-live="polite"></div>
@@ -52,15 +41,19 @@
         <section class="workspace" aria-label="Evaluation workspace">
           <div class="workspace-header">
             <div>
-              <p class="eyebrow">Selected Set</p>
-              <h2 id="selected-title">No set selected</h2>
-              <p id="selected-description">Create or select a test set to begin.</p>
+              <p class="eyebrow">Eval Lab · Run evaluation</p>
+              <h2 id="selected-title">Choose an evaluation suite</h2>
+              <p id="selected-description">Select a suite, add inputs, and compare model quality.</p>
             </div>
             <div class="selected-controls">
-              <div class="metric-strip" aria-label="Selected set metrics">
+              <div class="view-switcher" aria-label="Eval Lab views">
+                <a class="active" href="/" aria-current="page">Run</a>
+                <a id="results-nav-link" href="/observatory">Results</a>
+              </div>
+              <div class="metric-strip" aria-label="Selected suite metrics">
                 <div>
                   <span id="case-count">0</span>
-                  <small>Cases</small>
+                  <small>Inputs</small>
                 </div>
                 <div>
                   <span id="run-count">0</span>
@@ -72,27 +65,27 @@
                 </div>
               </div>
               <div class="selected-actions">
-                <button id="clear-selected-cases" class="button secondary compact" type="button">Clear Cases</button>
-                <button id="delete-selected-set" class="button danger compact" type="button">Delete Set</button>
+                <button id="clear-selected-cases" class="button secondary compact" type="button">Clear inputs</button>
+                <button id="delete-selected-set" class="button danger compact" type="button">Delete suite</button>
               </div>
             </div>
           </div>
 
-          <section class="quick-start" aria-label="Quick test guide">
+          <section class="quick-start" aria-label="Evaluation workflow">
             <div>
-              <strong>Quick test</strong>
-              <span>1. Create/select set</span>
-              <span>2. Load sample cases</span>
-              <span>3. Pick model and start</span>
+              <strong>Workflow</strong>
+              <span>1. Choose suite</span>
+              <span>2. Add inputs</span>
+              <span>3. Run evaluation</span>
             </div>
-            <p>For real keys, keep Max cases low first. Results and History are below the run status.</p>
+            <p>Each run keeps its score, output, and history for comparison.</p>
           </section>
 
           <div class="work-grid">
             <section class="panel">
               <div class="panel-heading">
                 <div>
-                  <h2>Cases</h2>
+                  <h2>Evaluation inputs</h2>
                   <p id="case-panel-note">Bulk add</p>
                 </div>
                 <button id="reload-cases" class="button secondary compact" type="button">Reload</button>
@@ -108,8 +101,8 @@ Why can large language models hallucinate?"></textarea>
                   <small class="field-hint">Add one input, or paste several inputs on separate lines.</small>
                 </label>
                 <div class="form-row">
-                  <button id="load-sample-cases" class="button secondary" type="button">Load Sample</button>
-                  <button class="button primary" type="submit">Add Cases</button>
+                  <button id="load-sample-cases" class="button secondary" type="button">Use sample</button>
+                  <button class="button primary" type="submit">Add inputs</button>
                   <button id="clear-bulk-cases" class="button secondary" type="button">Clear</button>
                 </div>
               </form>
@@ -123,7 +116,7 @@ Why can large language models hallucinate?"></textarea>
                   </thead>
                   <tbody id="case-preview-body">
                     <tr>
-                      <td colspan="1" class="empty-cell">No cases loaded</td>
+                      <td colspan="1" class="empty-cell">No inputs added</td>
                     </tr>
                   </tbody>
                 </table>
@@ -133,7 +126,7 @@ Why can large language models hallucinate?"></textarea>
             <section class="panel">
               <div class="panel-heading">
                 <div>
-                  <h2>Run Config</h2>
+                  <h2>Run evaluation</h2>
                   <p id="run-form-note">Ready</p>
                 </div>
               </div>
@@ -152,16 +145,16 @@ Why can large language models hallucinate?"></textarea>
                   <input id="run-temperature" name="temperature" type="number" min="0" max="2" step="0.1" value="0" />
                 </label>
                 <label>
-                  <span>Max cases</span>
+                  <span>Input limit</span>
                   <input id="run-max-cases" name="max_cases" type="number" min="1" step="1" value="3" placeholder="All" />
-                  <small class="field-hint">3 is safer for free-tier testing</small>
+                  <small class="field-hint">Choose how many inputs to evaluate</small>
                 </label>
                 <div class="wide-field prompt-field">
                   <label for="run-notes">Prompt Template - this changes model behavior</label>
                   <textarea id="run-notes" name="prompt_template" rows="4" required>Answer clearly and concisely:
 
 {input}</textarea>
-                  <small class="field-hint">Must contain {input}. Cases are test data; this prompt is the instruction being evaluated.</small>
+                  <small class="field-hint">Keep {input} where the evaluation input should be inserted.</small>
                 </div>
                 <button class="button primary wide-field" type="submit">Start Run</button>
               </form>
@@ -171,10 +164,13 @@ Why can large language models hallucinate?"></textarea>
           <section class="panel status-panel">
             <div class="panel-heading">
               <div>
-                <h2>Current Run</h2>
-                <p id="current-run-id">No active run</p>
+                <h2>Latest run</h2>
+                <p id="current-run-id">Choose a suite to see its latest run</p>
               </div>
-              <button id="stop-polling" class="button secondary compact" type="button">Stop Poll</button>
+              <div class="selected-actions">
+                <button id="stop-polling" class="button secondary compact" type="button" hidden>Stop updates</button>
+                <a id="view-results-link" class="button secondary compact" href="/observatory" hidden>View results</a>
+              </div>
             </div>
             <div class="run-status-grid">
               <div>
@@ -199,7 +195,7 @@ Why can large language models hallucinate?"></textarea>
             </div>
           </section>
 
-          <section class="panel table-panel">
+          <section class="panel table-panel run-advanced-results" hidden aria-hidden="true">
             <div class="tabbar" role="tablist" aria-label="Result views">
               <button id="results-tab" class="tab active" type="button" role="tab" aria-selected="true" data-view="results">Results</button>
               <button id="history-tab" class="tab" type="button" role="tab" aria-selected="false" data-view="history">History</button>
@@ -313,6 +309,6 @@ Why can large language models hallucinate?"></textarea>
     </div>
 
     <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
-    <script src="/static/app.js?v=20260606-inputs2" defer></script>
+    <script src="/static/app.js?v=20260821g" defer></script>
   </body>
 </html>

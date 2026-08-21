@@ -138,6 +138,8 @@ async def compare_runs(
                 passed_b=result_b.passed if result_b else None,
                 reason_a=result_a.judge_reason if result_a else None,
                 reason_b=result_b.judge_reason if result_b else None,
+                error_a=result_a.error if result_a else None,
+                error_b=result_b.error if result_b else None,
             )
         )
 

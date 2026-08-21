@@ -30,8 +30,7 @@ const state = {
 const els = {
   apiStatus: document.querySelector("#api-status"),
   configSummary: document.querySelector("#config-summary"),
-  refreshAll: document.querySelector("#refresh-all"),
-  refreshTestSets: document.querySelector("#refresh-test-sets"),
+  resultsNavLink: document.querySelector("#results-nav-link"),
   testSetCount: document.querySelector("#test-set-count"),
   testSetList: document.querySelector("#test-set-list"),
   createTestSetForm: document.querySelector("#create-test-set-form"),
@@ -65,6 +64,7 @@ const els = {
   currentRunUpdated: document.querySelector("#current-run-updated"),
   currentRunProgressBar: document.querySelector("#current-run-progress-bar"),
   stopPolling: document.querySelector("#stop-polling"),
+  viewResultsLink: document.querySelector("#view-results-link"),
   resultsTab: document.querySelector("#results-tab"),
   historyTab: document.querySelector("#history-tab"),
   compareTab: document.querySelector("#compare-tab"),
@@ -98,8 +98,6 @@ function init() {
 }
 
 function bindEvents() {
-  els.refreshAll.addEventListener("click", loadInitialData);
-  els.refreshTestSets.addEventListener("click", loadTestSets);
   els.createTestSetForm.addEventListener("submit", handleCreateTestSet);
   els.clearSelectedCases.addEventListener("click", handleClearSelectedCases);
   els.deleteSelectedSet.addEventListener("click", handleDeleteSelectedSet);
@@ -139,7 +137,7 @@ async function loadInitialData() {
     showToast("Config unavailable", getErrorMessage(configResult.reason), "error");
   }
   if (setsResult.status === "rejected") {
-    showToast("Test sets unavailable", getErrorMessage(setsResult.reason), "error");
+    showToast("Evaluation suites unavailable", getErrorMessage(setsResult.reason), "error");
   }
 
   const failures = results.filter((result) => result.status === "rejected").length;
@@ -165,7 +163,9 @@ async function loadTestSets() {
   renderTestSets();
 
   if (!state.selectedTestSetId && state.testSets.length > 0) {
-    await selectTestSet(state.testSets[0].id);
+    const queryId = Number(new URLSearchParams(window.location.search).get("set"));
+    const requested = state.testSets.find((set) => Number(set.id) === queryId);
+    await selectTestSet(requested?.id ?? state.testSets[0].id);
   } else if (state.selectedTestSetId) {
     const exists = state.testSets.some((set) => String(set.id) === String(state.selectedTestSetId));
     if (exists) {
@@ -178,7 +178,16 @@ async function loadTestSets() {
 }
 
 async function selectTestSet(id) {
+  const changed = String(state.selectedTestSetId) !== String(id);
+  if (changed) {
+    stopPolling(false);
+    state.currentRunId = null;
+    state.currentRun = null;
+    state.results = [];
+    state.resultsRunId = null;
+  }
   state.selectedTestSetId = id;
+  updateRunUrl(id);
   renderTestSets();
   await loadSelectedDetails();
 }
@@ -219,9 +228,12 @@ async function loadSelectedDetails() {
       showToast("Run history unavailable", getErrorMessage(runsResult.reason), "error");
     }
 
+    adoptLatestRunFromHistory();
+
     renderSelected();
     renderCases();
     renderHistory();
+    renderCurrentRun();
   } catch (error) {
     showToast("Selection failed", getErrorMessage(error), "error");
   }
@@ -292,7 +304,7 @@ async function handleClearSelectedCases() {
 
   const name = state.selectedTestSet.name || `Set ${shortId(state.selectedTestSetId)}`;
   const confirmed = window.confirm(
-    `Clear cases from "${name}"? This also removes run history for this set.`
+    `Clear inputs from "${name}"? This also removes run history for this suite.`
   );
   if (!confirmed) {
     return;
@@ -329,7 +341,7 @@ async function handleBulkCases(event) {
 
   const text = els.bulkCasesInput.value.trim();
   if (!text) {
-    showToast("No cases", "Paste cases before submitting.", "error");
+    showToast("No inputs", "Paste one or more inputs before submitting.", "error");
     return;
   }
 
@@ -396,6 +408,7 @@ async function handleStartRun(event) {
       model: runConfig.model,
       target_model: runConfig.model,
       judge_model: runConfig.judge_model,
+      prompt_template: runConfig.prompt_template,
       status: run.status || "pending",
       total: runConfig.max_cases || state.cases.length,
       completed: 0,
@@ -444,8 +457,10 @@ async function loadRunsForSelected(showNotice) {
   try {
     const data = await request(API.testSetRuns(state.selectedTestSetId));
     state.runs = sortRuns(toArray(data, ["runs", "items", "data"]).map(normalizeRun));
+    adoptLatestRunFromHistory();
     renderSelected();
     renderHistory();
+    renderCurrentRun();
     if (showNotice) {
       showToast("History reloaded", `${state.runs.length} runs`, "ok");
     }
@@ -568,11 +583,11 @@ function renderConfig() {
 }
 
 function renderTestSets() {
-  els.testSetCount.textContent = `${state.testSets.length} ${plural(state.testSets.length, "set", "sets")}`;
+  els.testSetCount.textContent = `${state.testSets.length} ${plural(state.testSets.length, "suite", "suites")}`;
   els.testSetList.innerHTML = "";
 
   if (state.testSets.length === 0) {
-    els.testSetList.appendChild(emptyBlock("No test sets yet"));
+    els.testSetList.appendChild(emptyBlock("No evaluation suites yet"));
     return;
   }
 
@@ -590,7 +605,7 @@ function renderTestSets() {
     title.textContent = testSet.name || `Set ${shortId(testSet.id)}`;
     const meta = document.createElement("span");
     meta.textContent = [
-      typeof testSet.caseCount === "number" ? `${testSet.caseCount} cases` : null,
+      typeof testSet.caseCount === "number" ? `${testSet.caseCount} inputs` : null,
       formatDate(testSet.createdAt),
     ]
       .filter(Boolean)
@@ -614,14 +629,14 @@ function renderSelected() {
   els.caseCount.textContent = String(caseCount);
   els.runCount.textContent = String(state.runs.length);
   els.latestStatus.textContent = state.runs[0]?.status || "Idle";
-  els.casePanelNote.textContent = `${caseCount} ${plural(caseCount, "case", "cases")}`;
+  els.casePanelNote.textContent = `${caseCount} ${plural(caseCount, "input", "inputs")}`;
 }
 
 function renderCases() {
   els.casePreviewBody.innerHTML = "";
 
   if (state.cases.length === 0) {
-    appendEmptyRow(els.casePreviewBody, 1, "No cases loaded");
+    appendEmptyRow(els.casePreviewBody, 1, "No inputs added");
     return;
   }
 
@@ -635,14 +650,21 @@ function renderCases() {
 function renderCurrentRun() {
   const run = state.currentRun;
   if (!run) {
-    els.currentRunId.textContent = "No active run";
-    els.currentRunStatus.textContent = "Idle";
-    els.currentRunProgress.textContent = "0 / 0";
+    els.stopPolling.hidden = true;
+    els.viewResultsLink.hidden = true;
+    els.currentRunId.textContent = state.selectedTestSetId ? "No runs for this suite yet" : "Choose a suite to see its latest run";
+    els.currentRunStatus.textContent = "Ready";
+    els.currentRunProgress.textContent = "—";
     els.currentRunScore.textContent = "-";
-    els.currentRunUpdated.textContent = "-";
+    els.currentRunUpdated.textContent = "Not started";
     els.currentRunProgressBar.style.width = "0%";
+    syncResultsLinks();
     return;
   }
+
+  const runStatus = String(run.status || "").toLowerCase();
+  els.stopPolling.hidden = ["done", "completed", "complete", "finished", "failed", "error", "cancelled", "canceled"].includes(runStatus);
+  els.viewResultsLink.hidden = false;
 
   const total = run.total ?? run.totalCases ?? state.cases.length ?? 0;
   const completed = run.completed ?? run.completedCases ?? state.results.length ?? 0;
@@ -654,6 +676,28 @@ function renderCurrentRun() {
   els.currentRunScore.textContent = formatScore(run.score ?? run.averageScore ?? run.avg_score);
   els.currentRunUpdated.textContent = formatDate(run.updatedAt || run.finishedAt || run.startedAt);
   els.currentRunProgressBar.style.width = `${progress}%`;
+  syncResultsLinks();
+}
+
+function adoptLatestRunFromHistory() {
+  const current = state.runs.find((run) => String(run.id) === String(state.currentRunId));
+  const active = state.runs.find((run) => !isTerminalRunStatus(run.status));
+  const next = current && !isTerminalRunStatus(current.status) ? current : (active || state.runs[0] || null);
+  state.currentRun = next;
+  state.currentRunId = next?.id || null;
+}
+
+function isTerminalRunStatus(status) {
+  return ["done", "completed", "complete", "finished", "failed", "error", "cancelled", "canceled"].includes(String(status || "").toLowerCase());
+}
+
+function syncResultsLinks() {
+  const url = new URL("/observatory", window.location.origin);
+  if (state.selectedTestSetId) url.searchParams.set("set", String(state.selectedTestSetId));
+  if (state.currentRunId) url.searchParams.set("run", String(state.currentRunId));
+  const href = `${url.pathname}${url.search}`;
+  els.resultsNavLink.href = href;
+  els.viewResultsLink.href = href;
 }
 
 function renderResults() {
@@ -792,7 +836,7 @@ function clearSelection() {
   stopPolling(false);
   setSelectedEnabled(false);
   els.selectedTitle.textContent = "No set selected";
-  els.selectedDescription.textContent = "Create or select a test set to begin.";
+  els.selectedDescription.textContent = "Select an evaluation suite to begin.";
   els.caseCount.textContent = "0";
   els.runCount.textContent = "0";
   els.latestStatus.textContent = "Idle";
@@ -801,6 +845,14 @@ function clearSelection() {
   renderCurrentRun();
   renderResults();
   renderHistory();
+  syncResultsLinks();
+}
+
+function updateRunUrl(id) {
+  const url = new URL(window.location.href);
+  if (id) url.searchParams.set("set", String(id));
+  else url.searchParams.delete("set");
+  window.history.replaceState({}, "", url);
 }
 
 function setSelectedEnabled(enabled) {
@@ -1395,7 +1447,7 @@ function emptyBlock(text) {
 
 function ensureSelected() {
   if (!state.selectedTestSetId) {
-    showToast("No test set", "Select or create a set first.", "error");
+    showToast("No evaluation suite", "Select or create a suite first.", "error");
     return false;
   }
   return true;

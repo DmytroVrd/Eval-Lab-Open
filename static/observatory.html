@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Explore evaluation quality, regressions, and provider readiness in AI Eval Lab." />
+    <title>Evaluation Results · Eval Lab</title>
+    <link rel="stylesheet" href="/static/observatory.css?v=20260821g" />
+  </head>
+  <body data-view="Quality Observatory">
+    <a class="obs-skip-link" href="#observatory-main">Skip to quality overview</a>
+    <div class="app-shell obs-shell">
+      <span id="obs-api-status" class="status-pill neutral sr-only" role="status" aria-live="polite">Connecting</span>
+
+      <main id="observatory-main" class="obs-main">
+        <section class="obs-hero" aria-labelledby="obs-title">
+          <div class="obs-hero-copy">
+            <p class="eyebrow">Evaluation results</p>
+            <h2 id="obs-title">Compare runs. Find what changed.</h2>
+            <p>Review quality, measure prompt or model changes, and inspect the cases behind every score.</p>
+          </div>
+          <div class="obs-hero-control">
+            <div class="view-switcher" aria-label="Eval Lab views">
+              <a id="obs-run-nav-link" href="/">Run</a>
+              <a class="active" href="/observatory" aria-current="page">Results</a>
+            </div>
+            <label class="obs-set-picker" for="obs-test-set">
+              <span>Evaluation suite</span>
+              <select id="obs-test-set" aria-describedby="obs-set-note"></select>
+              <small id="obs-set-note">Choose a suite to inspect its run history.</small>
+            </label>
+          </div>
+        </section>
+
+        <section id="obs-page-error" class="obs-state obs-state-error" role="alert" hidden>
+          <div>
+            <strong>We could not load the observatory.</strong>
+            <p id="obs-page-error-message">The API did not respond.</p>
+          </div>
+          <button id="obs-retry" class="button secondary" type="button">Try again</button>
+        </section>
+
+        <section id="obs-empty" class="obs-state obs-state-empty" hidden>
+          <div>
+            <span class="obs-empty-mark" aria-hidden="true">00</span>
+            <strong>No evaluation suites yet</strong>
+            <p>Create a suite and add inputs on the Run page. Its results will appear here automatically.</p>
+          </div>
+          <a class="button primary" href="/">Create a suite</a>
+        </section>
+
+        <div id="obs-loading" class="obs-loading-grid" aria-label="Loading quality overview">
+          <div class="obs-skeleton obs-skeleton-hero"></div>
+          <div class="obs-skeleton"></div>
+          <div class="obs-skeleton obs-skeleton-wide"></div>
+        </div>
+
+        <div id="obs-content" class="obs-content" hidden>
+          <section class="obs-signal-grid" aria-label="Current quality signal">
+            <article class="obs-card obs-score-card">
+              <div class="obs-card-heading">
+                <div>
+                  <p class="eyebrow">Latest completed run</p>
+                  <h3>Overall score</h3>
+                </div>
+                <span id="obs-run-status" class="status-pill neutral">No run</span>
+              </div>
+              <div class="obs-score-layout">
+                <div id="obs-score-ring" class="obs-score-ring" style="--score: 0" role="img" aria-label="No score available">
+                  <div>
+                    <strong id="obs-score-value">—</strong>
+                    <span>overall score</span>
+                  </div>
+                </div>
+                <div class="obs-verdict">
+                  <span id="obs-verdict-kicker">Waiting for evidence</span>
+                  <h4 id="obs-verdict-title">Run this set to establish a baseline.</h4>
+                  <p id="obs-verdict-copy">The observatory will combine score, pass rate, coverage, and case-level signals.</p>
+                  <div class="obs-mini-facts">
+                    <span><strong id="obs-pass-rate">—</strong> pass rate</span>
+                    <span><strong id="obs-coverage">—</strong> coverage</span>
+                    <span><strong id="obs-latency">—</strong> avg latency</span>
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <article class="obs-card obs-dimensions-card">
+              <div class="obs-card-heading">
+                <div>
+                  <p class="eyebrow">Score breakdown</p>
+                  <h3>Where quality is moving</h3>
+                </div>
+                <span id="obs-dimension-note">Selected run</span>
+              </div>
+              <div id="obs-dimensions" class="obs-dimensions"></div>
+            </article>
+          </section>
+
+          <section class="obs-card obs-prompt-card" aria-labelledby="obs-prompt-title">
+            <div class="obs-card-heading">
+              <div>
+                <p class="eyebrow">Selected run context</p>
+                <h3 id="obs-prompt-title">Prompt used</h3>
+              </div>
+              <span id="obs-prompt-run">No run selected</span>
+            </div>
+            <pre id="obs-selected-prompt">Select a completed run to inspect its prompt.</pre>
+            <div class="obs-prompt-meta" aria-label="Run configuration">
+              <span>Target <strong id="obs-prompt-target">—</strong></span>
+              <span>Judge <strong id="obs-prompt-judge">—</strong></span>
+            </div>
+          </section>
+
+          <section class="obs-control-grid" aria-label="Run comparison">
+            <article class="obs-card obs-compare-card">
+              <div class="obs-card-heading">
+                <div>
+                  <p class="eyebrow">Compare runs</p>
+                  <h3>Compare two runs</h3>
+                </div>
+                <span id="obs-compare-summary" class="obs-delta neutral">Select two runs</span>
+              </div>
+              <form id="obs-compare-form" class="obs-compare-form">
+                <label>
+                  <span>Baseline</span>
+                  <select id="obs-baseline-run" required></select>
+                </label>
+                <span class="obs-compare-arrow" aria-hidden="true">→</span>
+                <label>
+                  <span>Candidate</span>
+                  <select id="obs-candidate-run" required></select>
+                </label>
+                <button id="obs-compare-button" class="button primary" type="submit">Compare runs</button>
+              </form>
+              <p id="obs-compare-help" class="obs-help">Choose two runs from the same evaluation suite.</p>
+              <details id="obs-compare-details" class="obs-compare-details">
+                <summary>
+                  <span>Open detailed comparison</span>
+                  <strong id="obs-compare-case-count">0 cases</strong>
+                </summary>
+                <div class="obs-prompt-compare">
+                  <section>
+                    <small id="obs-baseline-prompt-label">Baseline prompt</small>
+                    <pre id="obs-baseline-prompt">Choose two runs to compare their prompts.</pre>
+                  </section>
+                  <section>
+                    <small id="obs-candidate-prompt-label">Candidate prompt</small>
+                    <pre id="obs-candidate-prompt">Choose two runs to compare their prompts.</pre>
+                  </section>
+                </div>
+                <div id="obs-compare-case-list" class="obs-compare-case-list"></div>
+              </details>
+            </article>
+
+            <article class="obs-card obs-provider-card" hidden aria-hidden="true">
+              <div class="obs-card-heading">
+                <div>
+                  <p class="eyebrow">Runtime readiness</p>
+                  <h3>Available models</h3>
+                </div>
+                <a href="/docs" class="obs-text-link">API docs</a>
+              </div>
+              <div id="obs-provider-list" class="obs-provider-list"></div>
+              <p id="obs-runtime-note" class="obs-help">Reading server configuration…</p>
+            </article>
+          </section>
+
+          <section class="obs-card obs-history-card" aria-labelledby="obs-history-title">
+            <div class="obs-card-heading obs-history-heading">
+              <div>
+                <p class="eyebrow">Run history</p>
+                <h3 id="obs-history-title">Recent runs</h3>
+              </div>
+              <p id="obs-history-meta">No runs loaded</p>
+            </div>
+            <div id="obs-run-rail" class="obs-run-rail" aria-live="polite"></div>
+          </section>
+
+          <section class="obs-analysis-grid" aria-label="Case analysis">
+            <article class="obs-card obs-cases-card">
+              <div class="obs-card-heading obs-cases-heading">
+                <div>
+                  <p class="eyebrow">Case review</p>
+                  <h3>Cases needing review</h3>
+                </div>
+                <div class="obs-filter-group" aria-label="Filter cases">
+                  <button class="obs-filter active" type="button" data-filter="all" aria-pressed="true">All</button>
+                  <button class="obs-filter" type="button" data-filter="attention" aria-pressed="false">Attention</button>
+                  <button class="obs-filter" type="button" data-filter="passed" aria-pressed="false">Passed</button>
+                  <button class="obs-filter" type="button" data-filter="errors" aria-pressed="false">Errors</button>
+                </div>
+              </div>
+              <div id="obs-case-state" class="obs-inline-state" role="status" aria-live="polite">Select a completed run to inspect its cases.</div>
+              <div id="obs-case-list" class="obs-case-list"></div>
+            </article>
+
+            <aside class="obs-card obs-launch-card" aria-labelledby="obs-launch-title" hidden aria-hidden="true">
+              <div class="obs-card-heading">
+                <div>
+                  <p class="eyebrow">Live experiment</p>
+                  <h3 id="obs-launch-title">Run evaluation</h3>
+                </div>
+                <span id="obs-launch-state" class="status-pill neutral">Ready</span>
+              </div>
+              <form id="obs-run-form" class="obs-run-form">
+                <label>
+                  <span>Target model</span>
+                  <select id="obs-model" required></select>
+                </label>
+                <label>
+                  <span>Judge model</span>
+                  <select id="obs-judge" required></select>
+                </label>
+                <div class="obs-form-row">
+                  <label>
+                    <span>Temperature</span>
+                    <input id="obs-temperature" type="number" min="0" max="2" step="0.1" value="0" />
+                  </label>
+                  <label>
+                    <span>Max cases</span>
+                    <input id="obs-max-cases" type="number" min="1" step="1" value="3" />
+                  </label>
+                </div>
+                <label>
+                  <span>Prompt template</span>
+                  <textarea id="obs-prompt" rows="6" required>Answer clearly and concisely:
+
+{input}</textarea>
+                  <small class="field-hint">Keep <code>{input}</code> in the template.</small>
+                </label>
+                <button class="button primary full" type="submit">Start evaluation</button>
+              </form>
+              <div id="obs-live-progress" class="obs-live-progress" hidden>
+                <div>
+                  <strong id="obs-live-label">Run queued</strong>
+                  <span id="obs-live-count">0 / 0</span>
+                </div>
+                <progress id="obs-live-meter" max="1" value="0">0%</progress>
+              </div>
+            </aside>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <div id="obs-toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+    <script src="/static/observatory.js?v=20260821i" defer></script>
+  </body>
+</html>
