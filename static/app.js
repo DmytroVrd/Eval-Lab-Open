@@ -1398,7 +1398,7 @@ function formatDate(value) {
   if (Number.isNaN(date.getTime())) {
     return String(value);
   }
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "2-digit",
     hour: "2-digit",
